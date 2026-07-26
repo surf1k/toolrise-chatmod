@@ -90,6 +90,14 @@ public final class PunishScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("Отмена"), b -> onClose())
                 .bounds(left + FIELD_WIDTH / 2 + 3, y, FIELD_WIDTH / 2 - 3, 20)
                 .build());
+        y += ROW_HEIGHT;
+
+        addRenderableWidget(Button.builder(
+                        Component.literal("Не проверять этого игрока")
+                                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)),
+                        b -> ignorePlayer())
+                .bounds(left, y, FIELD_WIDTH, 20)
+                .build());
 
         applySelection();
         setInitialFocus(nickBox);
@@ -132,6 +140,17 @@ public final class PunishScreen extends Screen {
         String reason = reasonBox.getValue().trim();
         String ruleInfo = selected == null ? "вручную" : selected.shortLabel();
         mod.executor().mute(message, nick, time, reason, ruleInfo);
+        onClose();
+    }
+
+    private void ignorePlayer() {
+        String nick = nickBox.getValue().trim();
+        if (nick.isEmpty()) {
+            return;
+        }
+        TrChatMod mod = TrChatMod.get();
+        mod.config().ignoredNicks.add(nick);
+        mod.configManager().saveConfig();
         onClose();
     }
 

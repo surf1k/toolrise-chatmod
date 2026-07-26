@@ -1,6 +1,9 @@
 package space.toolrise.chatmod.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
@@ -8,6 +11,9 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import space.toolrise.chatmod.TrChatMod;
@@ -16,6 +22,11 @@ import space.toolrise.chatmod.gui.PunishScreen;
 import space.toolrise.chatmod.rules.ScanResult;
 import space.toolrise.chatmod.rules.Violation;
 import space.toolrise.chatmod.text.TextNormalizer;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Клиентские команды мода. Отдельно важна {@code punish <id>} — именно её
@@ -62,6 +73,28 @@ public final class ModCommands {
                                         StringArgumentType.getString(ctx, "line")))))
                 .then(ClientCommandManager.literal("list")
                         .executes(ctx -> list(mod, ctx.getSource())))
+                .then(ClientCommandManager.literal("ignore")
+                        .executes(ctx -> ignoreList(mod, ctx.getSource()))
+                        .then(ClientCommandManager.literal("list")
+                                .executes(ctx -> ignoreList(mod, ctx.getSource())))
+                        .then(ClientCommandManager.literal("add")
+                                .then(ClientCommandManager.argument("nick", StringArgumentType.word())
+                                        .suggests(ONLINE_PLAYERS)
+                                        .executes(ctx -> ignoreAdd(mod, ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "nick")))))
+                        .then(ClientCommandManager.literal("remove")
+                                .then(ClientCommandManager.argument("nick", StringArgumentType.word())
+                                        .suggests(IGNORED_PLAYERS)
+                                        .executes(ctx -> ignoreRemove(mod, ctx.getSource(),
+                                                StringArgumentType.getString(ctx, "nick")))))
+                        .then(ClientCommandManager.literal("clear")
+                                .executes(ctx -> {
+                                    int n = mod.config().ignoredNicks.size();
+                                    mod.config().ignoredNicks.clear();
+                                    mod.configManager().saveConfig();
+                                    info(ctx.getSource(), "Игнор-лист очищен (" + n + ")");
+                                    return 1;
+                                })))
                 .then(ClientCommandManager.literal("config")
                         .executes(ctx -> {
                             info(ctx.getSource(), "Файлы: " + mod.configManager().directory());
@@ -197,6 +230,88 @@ public final class ModCommands {
         return 1;
     }
 
+    /** Ники игроков онлайн — для подсказок при вводе команды. */
+    private static final SuggestionProvider<FabricClientCommandSource> ONLINE_PLAYERS =
+            (ctx, builder) -> suggest(onlineNames(), builder);
+
+    private static final SuggestionProvider<FabricClientCommandSource> IGNORED_PLAYERS =
+            (ctx, builder) -> suggest(TrChatMod.get().config().ignoredNicks, builder);
+
+    private static CompletableFuture<Suggestions> suggest(List<String> names, SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(names, builder);
+    }
+
+    private static List<String> onlineNames() {
+        List<String> names = new ArrayList<>();
+        ClientPacketListener connection = Minecraft.getInstance().getConnection();
+        if (connection != null) {
+            for (PlayerInfo info : connection.getOnlinePlayers()) {
+                String name = info.getProfile().name();
+                if (name != null && !name.isBlank()) {
+                    names.add(name);
+                }
+            }
+        }
+        return names;
+    }
+
+    /** Добавляет игрока в игнор — мод перестаёт его проверять совсем. */
+    public static int ignoreAdd(TrChatMod mod, FabricClientCommandSource source, String nick) {
+        String clean = nick == null ? "" : nick.strip();
+        if (clean.isEmpty()) {
+            info(source, "Не указан ник.");
+            return 0;
+        }
+        boolean already = mod.config().ignoredNicks.stream()
+                .anyMatch(n -> n.equalsIgnoreCase(clean));
+        if (already) {
+            info(source, clean + " уже в игнор-листе");
+            return 1;
+        }
+        mod.config().ignoredNicks.add(clean);
+        mod.configManager().saveConfig();
+        source.sendFeedback(Component.literal("[ChatMod] ")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD))
+                .append(Component.literal(clean + " в игноре — его сообщения больше не проверяются ")
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN)))
+                .append(Component.literal("[вернуть]")
+                        .withStyle(Style.EMPTY
+                                .withColor(ChatFormatting.AQUA)
+                                .withUnderlined(true)
+                                .withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(
+                                        "/" + TrChatMod.COMMAND + " ignore remove " + clean)))));
+        return 1;
+    }
+
+    private static int ignoreRemove(TrChatMod mod, FabricClientCommandSource source, String nick) {
+        boolean removed = mod.config().ignoredNicks.removeIf(n -> n.equalsIgnoreCase(nick.strip()));
+        mod.configManager().saveConfig();
+        info(source, removed
+                ? nick + " убран из игнор-листа — снова проверяется"
+                : nick + " и не был в игнор-листе");
+        return 1;
+    }
+
+    private static int ignoreList(TrChatMod mod, FabricClientCommandSource source) {
+        List<String> list = mod.config().ignoredNicks;
+        if (list.isEmpty()) {
+            info(source, "Игнор-лист пуст. Добавить: /" + TrChatMod.COMMAND + " ignore add <ник>");
+            return 1;
+        }
+        info(source, "В игноре: " + list.size());
+        for (String nick : list) {
+            source.sendFeedback(Component.literal("  " + nick + " ")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE))
+                    .append(Component.literal("[вернуть]")
+                            .withStyle(Style.EMPTY
+                                    .withColor(ChatFormatting.AQUA)
+                                    .withUnderlined(true)
+                                    .withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(
+                                            "/" + TrChatMod.COMMAND + " ignore remove " + nick)))));
+        }
+        return 1;
+    }
+
     private static int setDryRun(TrChatMod mod, FabricClientCommandSource source, boolean dry) {
         mod.config().autoDryRun = dry;
         mod.configManager().saveConfig();
@@ -290,6 +405,7 @@ public final class ModCommands {
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " test <текст> — прогнать текст через правила"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " parse <строка> — как мод разбирает строку чата"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " list — последние помеченные сообщения"));
+        source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " ignore add|remove|list <ник> — не проверять игрока"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " config — путь к файлам настроек"));
         return 1;
     }

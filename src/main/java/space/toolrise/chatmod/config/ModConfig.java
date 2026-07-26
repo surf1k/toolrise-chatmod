@@ -74,6 +74,9 @@ public class ModConfig {
     /** Дописывать в метку номер правила: {@code [!2.1]}. */
     public boolean showRuleIdInMarker = true;
 
+    /** Дописывать к помеченному сообщению кнопку [игнор] — добавить игрока в игнор одним кликом. */
+    public boolean showIgnoreButton = true;
+
     /** Звук при обнаружении нарушения. */
     public boolean playSound = true;
 

@@ -66,6 +66,7 @@ public final class ChatDecorator {
                 root.append(Component.literal(p.text())
                         .withStyle(Style.EMPTY.withColor(ChatFormatting.RED)));
             }
+            appendIgnoreButton(root, message, config);
             return root;
         }
 
@@ -102,7 +103,26 @@ public final class ChatDecorator {
                 local = sliceEnd - partStart;
             }
         }
+        appendIgnoreButton(root, message, config);
         return root;
+    }
+
+    /**
+     * Кнопка «убрать этого игрока из проверки» прямо в строке чата. Свой
+     * ClickEvent на дочернем элементе перекрывает клик всего сообщения.
+     */
+    private static void appendIgnoreButton(MutableComponent root, FlaggedMessage message, ModConfig config) {
+        if (!config.showIgnoreButton || message.nick() == null || message.nick().isBlank()) {
+            return;
+        }
+        root.append(Component.literal(" [игнор]")
+                .withStyle(Style.EMPTY
+                        .withColor(ChatFormatting.DARK_GRAY)
+                        .withUnderlined(false)
+                        .withClickEvent(new ClickEvent.RunCommand(
+                                "/" + TrChatMod.COMMAND + " ignore add " + message.nick()))
+                        .withHoverEvent(new HoverEvent.ShowText(Component.literal(
+                                "Больше не проверять " + message.nick())))));
     }
 
     /** Отдельная строка-предупреждение — когда исходное сообщение трогать нельзя. */
