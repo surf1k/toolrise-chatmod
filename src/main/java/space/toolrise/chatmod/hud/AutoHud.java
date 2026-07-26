@@ -44,7 +44,9 @@ public final class AutoHud {
         Font font = client.font;
         boolean dry = auto.isDryRun();
         Component title = Component.literal(dry ? "● АВТОМАТ (ТЕСТ)" : "● АВТОМАТ");
+        int waiting = auto.pending().size();
         Component stats = Component.literal("выдано " + auto.issuedCount()
+                + (waiting > 0 ? " · ждёт " + waiting : "")
                 + " · очередь " + auto.queueSize());
 
         int width = Math.max(font.width(title), font.width(stats));

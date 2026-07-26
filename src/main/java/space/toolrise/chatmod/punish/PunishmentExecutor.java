@@ -88,6 +88,11 @@ public final class PunishmentExecutor {
             command = command.substring(1);
         }
 
+        if (!auto && mod.autoModerator() != null) {
+            // Человек успел раньше — снимаем то, что автомат собирался выдать сам.
+            mod.autoModerator().cancelFor(nick, "модератор выдал вручную");
+        }
+
         connection.sendCommand(command);
         TrChatMod.LOGGER.info("Отправлена команда ({}): /{}", auto ? "авто" : "вручную", command);
 

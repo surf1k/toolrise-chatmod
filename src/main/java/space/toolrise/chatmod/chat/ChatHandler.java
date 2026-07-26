@@ -142,6 +142,12 @@ public final class ChatHandler {
         ModConfig config = mod.config();
         String clean = TextNormalizer.stripFormatting(plain);
 
+        // Даже чистая строка может быть объявлением «X замучен» — по нему
+        // автомат снимает свою отложенную выдачу.
+        if (mod.autoModerator() != null) {
+            mod.autoModerator().observeChatLine(clean);
+        }
+
         ChatParser.Parsed parsed = mod.parser().parse(clean);
         String nick = senderHint != null && !senderHint.isBlank() ? senderHint : parsed.nick();
         String body = parsed.body();

@@ -99,6 +99,19 @@ public final class ModCommands {
                             info(ctx.getSource(), "Очередь очищена");
                             return 1;
                         })))
+                .then(ClientCommandManager.literal("cancel")
+                        .executes(ctx -> cancelAll(mod, ctx.getSource()))
+                        .then(ClientCommandManager.argument("id", IntegerArgumentType.integer(1))
+                                .executes(ctx -> {
+                                    int id = IntegerArgumentType.getInteger(ctx, "id");
+                                    boolean ok = mod.autoModerator().cancel(id);
+                                    info(ctx.getSource(), ok
+                                            ? "Отложенная выдача #" + id + " снята"
+                                            : "Нечего отменять: #" + id + " уже отправлено или не найдено");
+                                    return 1;
+                                })))
+                .then(ClientCommandManager.literal("pending")
+                        .executes(ctx -> pendingList(mod, ctx.getSource())))
                 .then(ClientCommandManager.literal("undo")
                         .executes(ctx -> undo(mod, ctx.getSource(), 1))
                         .then(ClientCommandManager.argument("count", IntegerArgumentType.integer(1, 32))
@@ -202,6 +215,39 @@ public final class ModCommands {
         return 1;
     }
 
+    private static int cancelAll(TrChatMod mod, FabricClientCommandSource source) {
+        int n = 0;
+        for (var p : mod.autoModerator().pending()) {
+            if (mod.autoModerator().cancel(p.message().id())) {
+                n++;
+            }
+        }
+        info(source, n == 0 ? "Отложенных выдач нет." : "Снято отложенных выдач: " + n);
+        return 1;
+    }
+
+    private static int pendingList(TrChatMod mod, FabricClientCommandSource source) {
+        var list = mod.autoModerator().pending();
+        if (list.isEmpty()) {
+            info(source, "Отложенных выдач нет.");
+            return 1;
+        }
+        long now = System.currentTimeMillis();
+        info(source, "Ждут отправки: " + list.size());
+        for (var p : list) {
+            source.sendFeedback(Component.literal("  " + p.nick() + " — " + p.ruleLabel()
+                            + " — через " + p.secondsLeft(now) + " сек ")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE))
+                    .append(Component.literal("[отменить]")
+                            .withStyle(Style.EMPTY
+                                    .withColor(ChatFormatting.AQUA)
+                                    .withUnderlined(true)
+                                    .withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(
+                                            "/" + TrChatMod.COMMAND + " cancel " + p.message().id())))));
+        }
+        return 1;
+    }
+
     private static int undo(TrChatMod mod, FabricClientCommandSource source, int count) {
         int done = mod.autoModerator().undo(count);
         info(source, done == 0
@@ -214,6 +260,8 @@ public final class ModCommands {
         info(source, "Команды:");
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " auto [on|off|dry] — автомат (кнопка F8)"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " queue [clear] — очередь на ручную проверку (F9)"));
+        source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " pending — что автомат сейчас держит на паузе"));
+        source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " cancel [id] — снять отложенную выдачу"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " undo [n] — снять последние автомуты"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " reload — перечитать config.json и rules.json"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " toggle — включить/выключить проверку"));

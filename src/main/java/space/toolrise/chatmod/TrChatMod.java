@@ -1,6 +1,7 @@
 package space.toolrise.chatmod;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -69,6 +70,8 @@ public final class TrChatMod implements ClientModInitializer {
         ModCommands.register(this);
         KeyBindings.register(this);
         AutoHud.register(this);
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> autoModerator.tick());
 
         // История спама/флуда и счётчики автомата относятся к конкретному серверу.
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
