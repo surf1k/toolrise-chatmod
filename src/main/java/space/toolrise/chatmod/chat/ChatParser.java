@@ -22,8 +22,9 @@ public final class ChatParser {
      * @param nick      ник отправителя или {@code null}
      * @param body      текст сообщения
      * @param bodyStart смещение тела внутри исходной строки — нужно для точной подсветки
+     * @param prefix    всё, что стоит до ника: канал, клан и ранг
      */
-    public record Parsed(String nick, String body, int bodyStart) {
+    public record Parsed(String nick, String body, int bodyStart, String prefix) {
     }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ChatParser.class);
@@ -42,7 +43,7 @@ public final class ChatParser {
 
     public Parsed parse(String plainLine) {
         if (plainLine == null || plainLine.isEmpty()) {
-            return new Parsed(null, "", 0);
+            return new Parsed(null, "", 0, "");
         }
         for (Pattern p : patterns) {
             Matcher m = p.matcher(plainLine);
@@ -60,9 +61,15 @@ public final class ChatParser {
             } catch (IllegalArgumentException ignored) {
                 // группы msg нет — оставим 0
             }
-            return new Parsed(nick, msg, Math.max(start, 0));
+            String prefix = "";
+            try {
+                prefix = plainLine.substring(0, Math.max(0, m.start("nick")));
+            } catch (IllegalArgumentException ignored) {
+                // группы nick нет — префикс не определить
+            }
+            return new Parsed(nick, msg, Math.max(start, 0), prefix);
         }
-        return new Parsed(null, plainLine, 0);
+        return new Parsed(null, plainLine, 0, "");
     }
 
     private static String group(Matcher m, String name) {

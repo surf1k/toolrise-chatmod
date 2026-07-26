@@ -105,7 +105,9 @@ public final class PunishScreen extends Screen {
             return;
         }
         TrChatMod mod = TrChatMod.get();
-        timeBox.setValue(PunishmentExecutor.timeToken(selected.mute(), mod.config()));
+        var capped = space.toolrise.chatmod.chat.RankPolicy.cap(
+                selected.mute(), message.prefix(), mod.config());
+        timeBox.setValue(PunishmentExecutor.timeToken(capped, mod.config()));
         reasonBox.setValue(mod.config().buildReason(selected.ruleId(), selected.ruleName(), ""));
         for (int i = 0; i < ruleButtons.size(); i++) {
             Violation v = violations.get(i);

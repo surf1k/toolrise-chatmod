@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import space.toolrise.chatmod.TrChatMod;
 import space.toolrise.chatmod.chat.FlaggedMessage;
+import space.toolrise.chatmod.chat.RankPolicy;
 import space.toolrise.chatmod.config.ModConfig;
 import space.toolrise.chatmod.punish.PunishmentExecutor;
 import space.toolrise.chatmod.rules.MuteDuration;
@@ -211,8 +212,10 @@ public final class AutoModerator {
             enqueue(message, "правило " + primary.ruleId() + " исключено из автомата");
             return;
         }
-        if (primary.mute().compareTo(ceiling()) > 0) {
-            enqueue(message, "мут " + primary.mute().display()
+        // Ранг может сам ограничить срок: медийщикам больше 10 минут нельзя.
+        MuteDuration wanted = RankPolicy.cap(primary.mute(), message.prefix(), config);
+        if (wanted.compareTo(ceiling()) > 0) {
+            enqueue(message, "мут " + wanted.display()
                     + " строже потолка " + ceiling().display());
             return;
         }
@@ -228,7 +231,7 @@ public final class AutoModerator {
             return;
         }
 
-        String time = PunishmentExecutor.timeToken(primary.mute(), config);
+        String time = PunishmentExecutor.timeToken(wanted, config);
         String reason = config.buildReason(primary.ruleId(), primary.ruleName(), "");
 
         if (config.autoDryRun) {

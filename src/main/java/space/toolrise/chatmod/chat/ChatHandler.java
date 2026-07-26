@@ -176,6 +176,11 @@ public final class ChatHandler {
         if (isIgnored(nick, config)) {
             return null;
         }
+        // Ранг стоит в строке чата перед ником — по нему видно состав.
+        // Список ников в rules.json устаревает, ранг — нет.
+        if (RankPolicy.isStaff(parsed.prefix(), config)) {
+            return null;
+        }
 
         long now = System.currentTimeMillis();
         if (nick != null && !nick.isBlank()) {
@@ -196,7 +201,7 @@ public final class ChatHandler {
 
         int id = mod.store().nextId();
         FlaggedMessage flagged = new FlaggedMessage(
-                id, nick, isOnline(nick), body, bodyStart, clean, result, now);
+                id, nick, isOnline(nick), body, bodyStart, clean, parsed.prefix(), result, now);
         mod.store().put(flagged);
         if (mod.autoModerator() != null) {
             mod.autoModerator().handle(flagged);

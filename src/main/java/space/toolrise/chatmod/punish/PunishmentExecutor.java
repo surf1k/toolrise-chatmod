@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import space.toolrise.chatmod.TrChatMod;
 import space.toolrise.chatmod.chat.FlaggedMessage;
+import space.toolrise.chatmod.chat.RankPolicy;
 import space.toolrise.chatmod.config.ModConfig;
 import space.toolrise.chatmod.rules.MuteDuration;
 import space.toolrise.chatmod.rules.Violation;
@@ -44,7 +45,8 @@ public final class PunishmentExecutor {
             return false;
         }
         ModConfig config = mod.config();
-        String time = timeToken(primary.mute(), config);
+        MuteDuration duration = RankPolicy.cap(primary.mute(), message.prefix(), config);
+        String time = timeToken(duration, config);
         String reason = config.buildReason(primary.ruleId(), primary.ruleName(), "");
         return mute(message, message.nick(), time, reason, primary.shortLabel(), false);
     }

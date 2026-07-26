@@ -1,7 +1,9 @@
 package space.toolrise.chatmod.config;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /** Настройки мода. Файл: {@code config/trchatmod/config.json}. */
 public class ModConfig {
@@ -31,6 +33,35 @@ public class ModConfig {
 
     /** Не проверять сообщения ников из groups.staffNicks в rules.json. */
     public boolean ignoreStaff = true;
+
+    /** Не проверять тех, у кого в строке чата стоит ранг состава. */
+    public boolean ignoreStaffRanks = true;
+
+    /**
+     * Ранги состава — этих мод не трогает. Сравнение идёт целым словом,
+     * поэтому донатные {@code D.ADMIN} и {@code D.OWNER} сюда НЕ попадают:
+     * это покупные ранги, а не должности.
+     */
+    public List<String> staffRanks = new ArrayList<>(List.of(
+            "OWNER", "DEVELOPER", "ORGANIZATOR", "MANAGER",
+            "CURATOR", "GL.CURATOR", "ZAM.CURATOR",
+            "ADMIN", "ST.ADMIN", "MODER", "ST.MODER", "GL.MODER",
+            "HELPER", "ST.HELPER",
+            "ВЛАДЕЛЕЦ", "РАЗРАБОТЧИК", "УПРАВЛЯЮЩИЙ", "КУРАТОР",
+            "АДМИН", "АДМИНИСТРАТОР", "МОДЕР", "МОДЕРАТОР", "ХЕЛПЕР", "СЛЕДЯЩИЙ"
+    ));
+
+    /**
+     * Потолок мута по рангу. Медийщикам больше 10 минут выдавать нельзя,
+     * поэтому даже за 4-часовое нарушение уйдёт 10 минут.
+     */
+    public Map<String, String> rankMuteLimits = new LinkedHashMap<>(Map.of(
+            "YOUTUBE", "10m",
+            "TIKTOK", "10m",
+            "MEDIA", "10m",
+            "БЛОГЕР", "10m",
+            "СМИ", "10m"
+    ));
 
     /** Ники, которые не проверяются никогда (например, боты). */
     public List<String> ignoredNicks = new ArrayList<>();

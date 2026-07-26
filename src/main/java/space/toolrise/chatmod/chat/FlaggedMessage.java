@@ -12,6 +12,7 @@ import space.toolrise.chatmod.rules.ScanResult;
  * @param bodyStart смещение тела внутри {@code fullLine}
  * @param fullLine  вся строка чата как она пришла (без кодов форматирования)
  * @param result    что нашёл движок правил
+ * @param prefix    часть строки до ника: канал, клан и ранг
  * @param time      момент получения, мс
  */
 public record FlaggedMessage(int id,
@@ -20,6 +21,7 @@ public record FlaggedMessage(int id,
                              String body,
                              int bodyStart,
                              String fullLine,
+                             String prefix,
                              ScanResult result,
                              long time) {
 

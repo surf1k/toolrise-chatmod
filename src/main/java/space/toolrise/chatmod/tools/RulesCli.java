@@ -2,8 +2,10 @@ package space.toolrise.chatmod.tools;
 
 import com.google.gson.Gson;
 import space.toolrise.chatmod.chat.ChatParser;
+import space.toolrise.chatmod.chat.RankPolicy;
 import space.toolrise.chatmod.config.ModConfig;
 import space.toolrise.chatmod.rules.MessageHistory;
+import space.toolrise.chatmod.rules.MuteDuration;
 import space.toolrise.chatmod.rules.RuleData;
 import space.toolrise.chatmod.rules.RuleEngine;
 import space.toolrise.chatmod.rules.ScanResult;
@@ -87,6 +89,7 @@ public final class RulesCli {
             case "norm" -> exit = norm(String.join(" ", rest), report);
             case "flood" -> exit = flood(engine, report);
             case "nicks" -> exit = nicks(engine, report);
+            case "ranks" -> exit = ranks(report);
             default -> {
                 usage();
                 exit = 2;
@@ -366,6 +369,58 @@ public final class RulesCli {
         return ok ? 0 : 1;
     }
 
+    /**
+     * Проверка рангов. Главное здесь — донатные D.ADMIN и D.OWNER: поиск
+     * подстроки «ADMIN» принял бы их за состав и перестал бы проверять донатеров.
+     */
+    private static int ranks(Report report) {
+        ModConfig config = new ModConfig();
+        report.line("ранги состава: " + config.staffRanks);
+        report.line("потолки по рангу: " + config.rankMuteLimits);
+        report.line("");
+
+        int failed = 0;
+        failed += staffCase(report, config, "L | Vampires | ORGANIZATOR ", true);
+        failed += staffCase(report, config, "G | клан | MODER ", true);
+        failed += staffCase(report, config, "G | клан | ST.HELPER ", true);
+        failed += staffCase(report, config, "G | клан | DEVELOPER ", true);
+        failed += staffCase(report, config, "G | Без клана | D.ADMIN ", false);
+        failed += staffCase(report, config, "L | The_Sopranos | D.OWNER ", false);
+        failed += staffCase(report, config, "G | Без клана | ХОЗЯИН ", false);
+        failed += staffCase(report, config, "L | клан | VLASTELIN ", false);
+        failed += staffCase(report, config, "G | клан | SHULKER ", false);
+        report.line("");
+        failed += capCase(report, config, "L | клан | YOUTUBE ", "4h", "10m");
+        failed += capCase(report, config, "L | клан | TIKTOK ", "7d", "10m");
+        failed += capCase(report, config, "L | клан | YOUTUBE ", "10m", "10m");
+        failed += capCase(report, config, "L | клан | VLASTELIN ", "4h", "4h");
+        failed += capCase(report, config, "G | Без клана | D.ADMIN ", "permanent", "permanent");
+
+        report.line("");
+        report.line("провалено: " + failed);
+        System.out.println("RANKS " + (failed == 0 ? "PASS" : "FAIL") + " failed=" + failed);
+        return failed == 0 ? 0 : 1;
+    }
+
+    private static int staffCase(Report report, ModConfig config, String prefix, boolean expected) {
+        boolean staff = RankPolicy.isStaff(prefix, config);
+        boolean ok = staff == expected;
+        report.line((ok ? "ok    " : "FAIL  ") + pad(prefix.strip(), 34)
+                + (staff ? "состав — не проверяем" : "обычный игрок — проверяем")
+                + ", ожидалось " + (expected ? "состав" : "обычный игрок"));
+        return ok ? 0 : 1;
+    }
+
+    private static int capCase(Report report, ModConfig config, String prefix,
+                               String wanted, String expected) {
+        MuteDuration capped = RankPolicy.cap(MuteDuration.parse(wanted), prefix, config);
+        boolean ok = capped.raw().equals(expected);
+        report.line((ok ? "ok    " : "FAIL  ") + pad(prefix.strip(), 34)
+                + pad(wanted, 12) + "-> " + pad(capped.raw(), 12)
+                + "ожидалось " + expected);
+        return ok ? 0 : 1;
+    }
+
     /** Показывает все нормализованные варианты — так видно, почему обход не совпал. */
     private static int norm(String text, Report report) {
         if (text.isBlank()) {
@@ -456,6 +511,7 @@ public final class RulesCli {
                   norm <text>            vse normalizovannye varianty teksta
   flood                  proverka detektora fluda (zavisit ot istorii)
   nicks                  proverka: niki igrokov ne schitayutsya narusheniem
+  ranks                  proverka: sostav ne trogaem, mediynym potolok muta
 
                 Opcii: --rules <path> --cases <path> --out <path>
                 Otchet pishetsya v fail v UTF-8 (--out, default build/rules-report.txt).
