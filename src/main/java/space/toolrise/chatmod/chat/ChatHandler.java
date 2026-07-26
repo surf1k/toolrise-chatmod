@@ -4,14 +4,17 @@ import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import space.toolrise.chatmod.TrChatMod;
 import space.toolrise.chatmod.config.ModConfig;
 import space.toolrise.chatmod.rules.ScanResult;
+import space.toolrise.chatmod.text.NickMasker;
 import space.toolrise.chatmod.text.TextNormalizer;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -176,7 +179,11 @@ public final class ChatHandler {
             mod.history().record(nick, normalized, now);
         }
 
-        ScanResult result = mod.engine().scan(body, nick, mod.history(), now);
+        // Чужие ники из текста убираем: за ник с матом отвечает его владелец
+        // по пункту 3.7, а не тот, кто к игроку обратился.
+        String scanned = config.ignoreNicknamesInText ? maskOnlineNicks(body) : body;
+
+        ScanResult result = mod.engine().scan(scanned, nick, mod.history(), now);
         if (result.isClean()) {
             return null;
         }
@@ -220,6 +227,22 @@ public final class ChatHandler {
             }
         }
         return false;
+    }
+
+    /** Заменяет ники подключённых игроков на заглушки той же длины. */
+    private static String maskOnlineNicks(String body) {
+        ClientPacketListener connection = Minecraft.getInstance().getConnection();
+        if (connection == null) {
+            return body;
+        }
+        List<String> names = new ArrayList<>();
+        for (PlayerInfo info : connection.getOnlinePlayers()) {
+            String name = info.getProfile().name();
+            if (name != null && !name.isBlank()) {
+                names.add(name);
+            }
+        }
+        return NickMasker.mask(body, names);
     }
 
     private static boolean isOnline(String nick) {

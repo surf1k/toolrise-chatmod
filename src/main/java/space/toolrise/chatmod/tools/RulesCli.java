@@ -8,6 +8,7 @@ import space.toolrise.chatmod.rules.RuleData;
 import space.toolrise.chatmod.rules.RuleEngine;
 import space.toolrise.chatmod.rules.ScanResult;
 import space.toolrise.chatmod.rules.Violation;
+import space.toolrise.chatmod.text.NickMasker;
 import space.toolrise.chatmod.text.NormalizedText;
 import space.toolrise.chatmod.text.TextNormalizer;
 
@@ -85,6 +86,7 @@ public final class RulesCli {
             case "test" -> exit = test(engine, String.join(" ", rest), report);
             case "norm" -> exit = norm(String.join(" ", rest), report);
             case "flood" -> exit = flood(engine, report);
+            case "nicks" -> exit = nicks(engine, report);
             default -> {
                 usage();
                 exit = 2;
@@ -329,6 +331,41 @@ public final class RulesCli {
         return ok ? 0 : 1;
     }
 
+    /**
+     * Проверка того, что ники игроков не считаются нарушением: за ник с матом
+     * отвечает его владелец по пункту 3.7, а не тот, кто к нему обратился.
+     */
+    private static int nicks(RuleEngine engine, Report report) {
+        List<String> online = List.of("Dj_pIdOrAs", "Japatuxa123", "SuKa_777", "Player_01");
+        report.line("игроки онлайн: " + online);
+        report.line("");
+
+        int failed = 0;
+        failed += nickCase(engine, report, online, "Dj_pIdOrAs бекни мидасу", false);
+        failed += nickCase(engine, report, online, "привет SuKa_777", false);
+        failed += nickCase(engine, report, online, "Dj_pIdOrAs ты тварь", true);
+        failed += nickCase(engine, report, online, "ты пидорас", true);
+        failed += nickCase(engine, report, online, "Japatuxa123 го пвп", false);
+
+        report.line("");
+        report.line("провалено: " + failed);
+        System.out.println("NICKS " + (failed == 0 ? "PASS" : "FAIL") + " failed=" + failed);
+        return failed == 0 ? 0 : 1;
+    }
+
+    private static int nickCase(RuleEngine engine, Report report, List<String> online,
+                                String body, boolean expected) {
+        String masked = NickMasker.mask(body, online);
+        ScanResult result = engine.scan(masked, "Tester", null, System.currentTimeMillis());
+        boolean flagged = !result.isClean();
+        boolean ok = flagged == expected;
+        report.line((ok ? "ok    " : "FAIL  ") + pad(body, 30)
+                + "-> " + pad(masked, 30)
+                + (flagged ? "нарушение " + ruleIds(result) : "чисто")
+                + ", ожидалось " + (expected ? "нарушение" : "чисто"));
+        return ok ? 0 : 1;
+    }
+
     /** Показывает все нормализованные варианты — так видно, почему обход не совпал. */
     private static int norm(String text, Report report) {
         if (text.isBlank()) {
@@ -418,6 +455,7 @@ public final class RulesCli {
                   test <text>            odin tekst
                   norm <text>            vse normalizovannye varianty teksta
   flood                  proverka detektora fluda (zavisit ot istorii)
+  nicks                  proverka: niki igrokov ne schitayutsya narusheniem
 
                 Opcii: --rules <path> --cases <path> --out <path>
                 Otchet pishetsya v fail v UTF-8 (--out, default build/rules-report.txt).

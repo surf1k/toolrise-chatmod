@@ -115,13 +115,31 @@ public final class AutoModerator {
         }
         config.autoMode = active;
         mod.configManager().saveConfig();
-        announce(active
-                ? Component.literal("АВТОМАТ ВКЛЮЧЁН")
-                .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN).withBold(true))
-                .append(Component.literal(config.autoDryRun ? " (тестовый режим, команды не уходят)" : "")
-                        .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(false)))
-                : Component.literal("Автомат выключен")
-                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)));
+        if (!active) {
+            announce(Component.literal("Автомат выключен")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)));
+            return;
+        }
+
+        if (config.autoDryRun) {
+            // Тест — залипающее состояние, поэтому выход из него всегда рядом,
+            // одним кликом: иначе легко решить, что автомат сломан.
+            announce(Component.literal("АВТОМАТ ВКЛЮЧЁН, НО В ТЕСТОВОМ РЕЖИМЕ")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW).withBold(true))
+                    .append(Component.literal(" — команды не уходят ")
+                            .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY).withBold(false)))
+                    .append(Component.literal("[включить по-настоящему]")
+                            .withStyle(Style.EMPTY
+                                    .withColor(ChatFormatting.GREEN)
+                                    .withBold(false)
+                                    .withUnderlined(true)
+                                    .withClickEvent(new ClickEvent.RunCommand(
+                                            "/" + TrChatMod.COMMAND + " auto live")))));
+            return;
+        }
+
+        announce(Component.literal("АВТОМАТ ВКЛЮЧЁН")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN).withBold(true)));
         if (active && !config.autoDryRun) {
             announce(Component.literal("потолок: " + ceiling().display()
                             + ", лимит: " + config.autoMaxPerMinute + "/мин"

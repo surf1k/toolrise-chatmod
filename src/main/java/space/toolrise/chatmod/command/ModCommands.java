@@ -77,13 +77,18 @@ public final class ModCommands {
                             mod.autoModerator().setActive(false);
                             return 1;
                         }))
-                        .then(ClientCommandManager.literal("dry").executes(ctx -> {
-                            mod.config().autoDryRun = !mod.config().autoDryRun;
-                            mod.configManager().saveConfig();
-                            info(ctx.getSource(), "Тестовый режим автомата "
-                                    + (mod.config().autoDryRun ? "включён — команды не отправляются" : "выключен"));
+                        // «Работай по-настоящему» одной командой: снимает тест и включает автомат.
+                        .then(ClientCommandManager.literal("live").executes(ctx -> {
+                            setDryRun(mod, ctx.getSource(), false);
+                            mod.autoModerator().setActive(true);
                             return 1;
-                        })))
+                        }))
+                        .then(ClientCommandManager.literal("dry")
+                                .executes(ctx -> setDryRun(mod, ctx.getSource(), !mod.config().autoDryRun))
+                                .then(ClientCommandManager.literal("on")
+                                        .executes(ctx -> setDryRun(mod, ctx.getSource(), true)))
+                                .then(ClientCommandManager.literal("off")
+                                        .executes(ctx -> setDryRun(mod, ctx.getSource(), false)))))
                 .then(ClientCommandManager.literal("queue")
                         .executes(ctx -> {
                             mod.showQueue();
@@ -166,6 +171,19 @@ public final class ModCommands {
                             .withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(
                                     "/" + TrChatMod.COMMAND + " punish " + m.id()))));
         }
+        return 1;
+    }
+
+    private static int setDryRun(TrChatMod mod, FabricClientCommandSource source, boolean dry) {
+        mod.config().autoDryRun = dry;
+        mod.configManager().saveConfig();
+        source.sendFeedback(Component.literal("[ChatMod] ")
+                .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD))
+                .append(dry
+                        ? Component.literal("Тестовый режим ВКЛЮЧЁН — команды не отправляются")
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW))
+                        : Component.literal("Тестовый режим выключен — автомат наказывает по-настоящему")
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.GREEN))));
         return 1;
     }
 
