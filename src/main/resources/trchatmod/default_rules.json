@@ -1,11 +1,15 @@
 {
-  "schema": 2,
+  "schema": 3,
   "_comment": [
     "База правил ToolRise для клиентского мода модерации чата.",
     "Источники: https://toolrise.space/rules (пункты 2.0-2.10) и таблица исключений/нарушений",
     "https://docs.google.com/spreadsheets/d/1mrJSc2SySzo2iSeE90aPLZOFBNyyxFxuQYiOSrUeEvc (лист TL).",
     "",
     "Файл копируется в config/trchatmod/rules.json при первом запуске. Правьте копию, а не мод.",
+    "",
+    "ВАЖНО ПРИ ЛЮБОЙ ПРАВКЕ ЭТОГО ФАЙЛА: подними schema на единицу. Мод не трогает",
+    "уже созданный config/trchatmod/rules.json, пока schema в нём не ниже здешней —",
+    "без этого правка останется в jar и до игрока не доедет.",
     "Перезагрузка без перезапуска игры: /trchatmod reload",
     "",
     "Синтаксис фраз:",
@@ -32,6 +36,7 @@
     "repeatCharThreshold": 8,
     "spamWindowSeconds": 60,
     "spamRepeatCount": 4,
+    "spamMinLength": 3,
     "floodWindowSeconds": 10,
     "floodMessageCount": 8,
     "adWhitelist": [

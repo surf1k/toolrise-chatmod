@@ -388,7 +388,7 @@ public final class RuleEngine {
             return null;
         }
         String norm = TextNormalizer.normalize(body, TextNormalizer.Alphabet.CYRILLIC, TextNormalizer.Mode.SQUEEZE).value();
-        if (norm.isBlank()) {
+        if (norm.isBlank() || norm.length() < Math.max(0, s.spamMinLength)) {
             return null;
         }
         int n = history.repeatCount(sender, norm, s.spamWindowSeconds, nowMillis);

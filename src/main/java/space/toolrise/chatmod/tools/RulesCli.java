@@ -307,6 +307,12 @@ public final class RulesCli {
         failed += floodCase(engine, report, "4 разных сообщения",
                 new String[]{"привет", "как дела", "го пвп", "я в аду"},
                 new long[]{0, 10_000, 20_000, 30_000}, false);
+        failed += floodCase(engine, report, "4 коротких «да» — не флуд",
+                new String[]{"да", "да?", "да", "да"},
+                new long[]{0, 10_000, 20_000, 30_000}, false);
+        failed += floodCase(engine, report, "5 коротких «да» — всё равно не флуд",
+                new String[]{"да", "да", "да", "да", "да"},
+                new long[]{0, 5_000, 10_000, 15_000, 20_000}, false);
         failed += floodCase(engine, report, "4 одинаковых с разным регистром и знаками",
                 new String[]{"кто продаст сет", "КТО ПРОДАСТ СЕТ", "кто продаст сет!!", "Кто продаст сет..."},
                 new long[]{0, 10_000, 20_000, 30_000}, true);

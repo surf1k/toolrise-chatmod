@@ -26,6 +26,11 @@ public class RuleData {
         /** Флуд по определению проекта: 4 и более одинаковых сообщений за минуту. */
         public int spamWindowSeconds = 60;
         public int spamRepeatCount = 4;
+        /**
+         * Короче этого повторы не считаются флудом. «да», «я», «гг» в диалоге
+         * повторяются постоянно и флудом не являются.
+         */
+        public int spamMinLength = 3;
         /** Отдельный детектор быстрого потока разных сообщений — не то же самое, что флуд. */
         public int floodWindowSeconds = 10;
         public int floodMessageCount = 8;

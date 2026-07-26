@@ -78,6 +78,10 @@ public final class TrChatMod implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> autoModerator.tick());
 
+        // Один раз при заходе показываем, что реально включено. Без этого легко
+        // обновить мод и не заметить, что правила читаются из старого конфига.
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> showStatus());
+
         // История спама/флуда и счётчики автомата относятся к конкретному серверу.
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             history.clear();
@@ -90,6 +94,31 @@ public final class TrChatMod implements ClientModInitializer {
         LOGGER.info("{} запущен. Правил: {}, паттернов: {}, автомат: {}",
                 MOD_NAME, configManager.engine().ruleCount(), configManager.engine().patternCount(),
                 config().autoMode ? "включён" : "выключен");
+    }
+
+    /** Короткая строка «что сейчас включено» — печатается при заходе на сервер. */
+    public void showStatus() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.gui == null) {
+            return;
+        }
+        var settings = configManager.engine().data().settings;
+        int matThreshold = configManager.ruleData().rules.stream()
+                .filter(r -> "2.9".equals(r.id))
+                .mapToInt(r -> r.minMatches)
+                .findFirst().orElse(1);
+
+        client.gui.getChat().addMessage(prefix()
+                .append(Component.literal("правила v" + configManager.ruleData().schema
+                                + " · флуд " + settings.spamRepeatCount + "/" + settings.spamWindowSeconds + "с"
+                                + " · мат от " + matThreshold
+                                + " · автомат " + (config().autoMode
+                                        ? (config().autoDryRun ? "ТЕСТ" : "ВКЛ") : "выкл"))
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)))
+                .append(Component.literal(" [папка]")
+                        .withStyle(Style.EMPTY
+                                .withColor(ChatFormatting.DARK_GRAY)
+                                .withClickEvent(new ClickEvent.RunCommand("/" + COMMAND + " config")))));
     }
 
     /** Показывает очередь на ручную проверку. Вызывается кнопкой и командой. */

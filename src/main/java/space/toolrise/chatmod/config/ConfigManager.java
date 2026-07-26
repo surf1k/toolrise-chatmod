@@ -37,7 +37,7 @@ public final class ConfigManager {
      * (например, про порог minMatches у 2.9). Старый файл сохраняется рядом,
      * на его место кладётся свежий.
      */
-    private static final int RULES_SCHEMA = 2;
+    private static final int RULES_SCHEMA = 3;
 
     private final Path directory;
     private final Path configFile;
