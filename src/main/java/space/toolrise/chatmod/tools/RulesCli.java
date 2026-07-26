@@ -451,6 +451,20 @@ public final class RulesCli {
         List<ChatLogBuffer.Line> narrow = buffer.byPlayer("Flooder", 30, now);
         failed += expect(report, "окно 30 сек отсекает раннее", narrow.size(), 2);
 
+        // Именно этот случай пришёл из боя: 4 повтора за 1:47, но в минутное
+        // окно попадают только последние три — протокол обязан это показывать.
+        long realBase = 2_000_000_000L;
+        ChatLogBuffer real = new ChatLogBuffer(100);
+        real.add(realBase, "famik14 » паркур", "famik14");
+        real.add(realBase + 66_000, "famik14 » паркур", "famik14");
+        real.add(realBase + 86_000, "famik14 » паркур", "famik14");
+        real.add(realBase + 107_000, "famik14 » паркур", "famik14");
+        long realNow = realBase + 107_000;
+        List<ChatLogBuffer.Line> shown = real.byPlayer("famik14", 120, realNow);
+        failed += expect(report, "показываем за 120 сек все 4", shown.size(), 4);
+        failed += expect(report, "в минутное окно попали 3",
+                ChatLogBuffer.countInWindow(shown, realNow, 60), 3);
+
         failed += expect(report, "контекст берёт все строки", buffer.tail(40).size(), 5);
         failed += expect(report, "контекст ограничен запросом", buffer.tail(2).size(), 2);
 

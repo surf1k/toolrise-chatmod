@@ -124,9 +124,27 @@ public final class EvidenceRecorder {
         if (!own.isEmpty()) {
             sb.append('\n').append("ВСЕ РЕПЛИКИ ИГРОКА ЗА ПОСЛЕДНИЕ ").append(window)
                     .append(" СЕК (").append(own.size()).append(")\n");
+
+            // Окно показа шире окна флуда. Без пометки протокол читается как
+            // «четыре повтора за две минуты», то есть как доказательство не того,
+            // за что выдан мут. Помечаем ровно то, что посчитал детектор.
+            boolean floodCase = message != null && hasFloodEvidence(message);
+            int floodWindow = mod.engine().data().settings.spamWindowSeconds;
+            int floodNeeded = mod.engine().data().settings.spamRepeatCount;
+            long at = System.currentTimeMillis();
+            if (floodCase) {
+                int inWindow = ChatLogBuffer.countInWindow(own, at, floodWindow);
+                sb.append("Флуд считается по окну ").append(floodWindow)
+                        .append(" сек, порог ").append(floodNeeded)
+                        .append(". Знаком * помечено попавшее в окно: ")
+                        .append(inWindow).append(" из ").append(own.size()).append('\n');
+            }
             sb.append("-".repeat(60)).append('\n');
             for (ChatLogBuffer.Line l : own) {
-                sb.append('[').append(stamp(l.time())).append("] ").append(l.line()).append('\n');
+                boolean counted = floodCase && ChatLogBuffer.inWindow(l.time(), at, floodWindow);
+                sb.append(counted ? "* " : "  ")
+                        .append('[').append(stamp(l.time())).append("] ")
+                        .append(l.line()).append('\n');
             }
         }
 
@@ -142,6 +160,18 @@ public final class EvidenceRecorder {
             }
         }
         return sb.toString();
+    }
+
+    /** Сработал ли детектор повторов — по нему решаем, показывать ли окно флуда. */
+    private static boolean hasFloodEvidence(FlaggedMessage message) {
+        for (Violation v : message.result().violations()) {
+            for (String e : v.evidence()) {
+                if (e.contains("одно и то же")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static void screenshot(Path target) {

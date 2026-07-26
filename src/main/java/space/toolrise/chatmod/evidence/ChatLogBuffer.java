@@ -75,6 +75,22 @@ public final class ChatLogBuffer {
         lines.clear();
     }
 
+    /** Попадает ли момент в окно {@code [now - windowSeconds, now]}. */
+    public static boolean inWindow(long time, long now, int windowSeconds) {
+        return time >= now - windowSeconds * 1000L && time <= now;
+    }
+
+    /** Сколько строк из списка попало в окно — именно это число видит детектор флуда. */
+    public static int countInWindow(List<Line> lines, long now, int windowSeconds) {
+        int n = 0;
+        for (Line l : lines) {
+            if (inWindow(l.time(), now, windowSeconds)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     private void trim() {
         while (lines.size() > capacity) {
             lines.removeFirst();
