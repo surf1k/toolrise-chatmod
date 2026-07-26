@@ -1,0 +1,153 @@
+package space.toolrise.chatmod.punish;
+
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
+import space.toolrise.chatmod.TrChatMod;
+import space.toolrise.chatmod.chat.FlaggedMessage;
+import space.toolrise.chatmod.config.ModConfig;
+import space.toolrise.chatmod.rules.MuteDuration;
+import space.toolrise.chatmod.rules.Violation;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+/**
+ * Отправка команды наказания и запись в журнал.
+ *
+ * <p>Команда уходит ровно один раз и только по явному действию модератора:
+ * ни один автоматический путь сюда не ведёт.
+ */
+public final class PunishmentExecutor {
+
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String CSV_HEADER =
+            "время;источник;модератор;нарушитель;правило;срок;команда;сообщение";
+
+    private final TrChatMod mod;
+
+    public PunishmentExecutor(TrChatMod mod) {
+        this.mod = mod;
+    }
+
+    /** Выдаёт мут по данным помеченного сообщения, беря рекомендованное правило. */
+    public boolean muteRecommended(FlaggedMessage message) {
+        Violation primary = message.result().primary();
+        if (primary == null) {
+            return false;
+        }
+        ModConfig config = mod.config();
+        String time = timeToken(primary.mute(), config);
+        String reason = config.buildReason(primary.ruleId(), primary.ruleName(), "");
+        return mute(message, message.nick(), time, reason, primary.shortLabel(), false);
+    }
+
+    public boolean mute(FlaggedMessage message, String nick, String time, String reason, String ruleInfo) {
+        return mute(message, nick, time, reason, ruleInfo, false);
+    }
+
+    /**
+     * Выдаёт мут вручную заданными параметрами.
+     *
+     * @param message  исходное сообщение (для журнала), может быть {@code null}
+     * @param nick     ник нарушителя
+     * @param time     срок в том виде, в каком его ждёт серверная команда
+     * @param reason   причина
+     * @param ruleInfo что записать в журнал в колонку «правило»
+     * @param auto     выдано автоматом, а не человеком — попадёт в журнал и в текст в чате
+     */
+    public boolean mute(FlaggedMessage message, String nick, String time, String reason,
+                        String ruleInfo, boolean auto) {
+        Minecraft client = Minecraft.getInstance();
+        if (nick == null || nick.isBlank()) {
+            feedback(Component.literal("Не указан ник — мут не выдан.")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.RED)));
+            return false;
+        }
+        ClientPacketListener connection = client.getConnection();
+        if (connection == null) {
+            feedback(Component.literal("Нет подключения к серверу.")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.RED)));
+            return false;
+        }
+
+        String command = mod.config().buildCommand(nick, time, reason);
+        if (command.isBlank()) {
+            feedback(Component.literal("Пустой шаблон команды в config.json.")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.RED)));
+            return false;
+        }
+        if (command.startsWith("/")) {
+            command = command.substring(1);
+        }
+
+        connection.sendCommand(command);
+        TrChatMod.LOGGER.info("Отправлена команда ({}): /{}", auto ? "авто" : "вручную", command);
+
+        feedback(Component.literal(auto ? "Автомут: " : "Мут выдан: ")
+                .withStyle(Style.EMPTY.withColor(auto ? ChatFormatting.AQUA : ChatFormatting.GREEN))
+                .append(Component.literal(nick).withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)))
+                .append(Component.literal(" — " + time + " — " + reason)
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY))));
+
+        if (mod.config().logPunishments) {
+            log(auto ? "авто" : "вручную", nick, ruleInfo, time, command,
+                    message == null ? "" : message.body());
+        }
+        return true;
+    }
+
+    public static String timeToken(MuteDuration duration, ModConfig config) {
+        return duration.isPermanent() ? config.permanentToken : duration.raw();
+    }
+
+    private void log(String source, String nick, String ruleInfo, String time, String command, String body) {
+        Path file = mod.configManager().directory().resolve("punishments.csv");
+        String moderator = Minecraft.getInstance().player == null
+                ? "?" : Minecraft.getInstance().player.getGameProfile().name();
+        String row = String.join(";",
+                STAMP.format(LocalDateTime.now()),
+                csv(source),
+                csv(moderator),
+                csv(nick),
+                csv(ruleInfo),
+                csv(time),
+                csv("/" + command),
+                csv(body));
+        try {
+            Files.createDirectories(file.getParent());
+            if (Files.notExists(file)) {
+                Files.writeString(file, CSV_HEADER + System.lineSeparator(),
+                        StandardCharsets.UTF_8, StandardOpenOption.CREATE);
+            }
+            Files.writeString(file, row + System.lineSeparator(),
+                    StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            TrChatMod.LOGGER.error("Не удалось записать журнал наказаний", e);
+        }
+    }
+
+    private static String csv(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace(';', ',').replace('\n', ' ').replace('\r', ' ').trim();
+    }
+
+    private static void feedback(Component component) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.gui != null) {
+            client.gui.getChat().addMessage(
+                    Component.literal("[ChatMod] ")
+                            .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD))
+                            .append(component));
+        }
+    }
+}

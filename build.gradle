@@ -1,0 +1,75 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name
+}
+
+repositories {
+}
+
+loom {
+	// Мод чисто клиентский — один sourceSet, без splitEnvironmentSourceSets()
+	mods {
+		"trchatmod" {
+			sourceSet sourceSets.main
+		}
+	}
+}
+
+dependencies {
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings loom.officialMojangMappings()
+	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+	// Ресурсы на русском — кодировку фиксируем явно, чтобы не зависеть от локали системы.
+	filteringCharset = 'UTF-8'
+
+	def props = [
+			version           : project.version,
+			minecraft_version : project.minecraft_version,
+			loader_version    : project.loader_version
+	]
+	inputs.properties props
+
+	filesMatching("fabric.mod.json") {
+		expand props
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+	it.options.encoding = 'UTF-8'
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}
+
+// Утилита проверки правил. Ей пользуется агент bypass-hunter и можно руками:
+//   ./gradlew -q rules --args="verify"
+//   ./gradlew -q rules --args="scan путь/к/latest.log"
+tasks.register('rules', JavaExec) {
+	group = 'toolrise'
+	description = 'Проверка rules.json: verify | check <файл> | scan <лог> | test <текст> | norm <текст>'
+	mainClass = 'space.toolrise.chatmod.tools.RulesCli'
+	classpath = sourceSets.main.runtimeClasspath
+	jvmArgs = ['-Dfile.encoding=UTF-8']
+	// Ненулевой код возврата у verify — это результат проверки, а не поломка сборки.
+	ignoreExitValue = false
+}
+
+jar {
+	from("LICENSE") {
+		rename { "${it}_${project.base.archivesName.get()}" }
+	}
+}

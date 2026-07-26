@@ -1,0 +1,26 @@
+{
+	"schemaVersion": 1,
+	"id": "trchatmod",
+	"version": "${version}",
+	"name": "ToolRise ChatMod",
+	"description": "Клиентский мод модерации чата для ToolRise: подсвечивает нарушения красным и выдаёт мут по клику.",
+	"authors": [
+		"ToolRise"
+	],
+	"contact": {
+		"homepage": "https://toolrise.space/rules"
+	},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"space.toolrise.chatmod.TrChatMod"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=${loader_version}",
+		"minecraft": "~${minecraft_version}",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
