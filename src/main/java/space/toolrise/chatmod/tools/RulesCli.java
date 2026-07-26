@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import space.toolrise.chatmod.chat.ChatParser;
 import space.toolrise.chatmod.chat.RankPolicy;
 import space.toolrise.chatmod.config.ModConfig;
+import space.toolrise.chatmod.evidence.ChatLogBuffer;
 import space.toolrise.chatmod.rules.MessageHistory;
 import space.toolrise.chatmod.rules.MuteDuration;
 import space.toolrise.chatmod.rules.RuleData;
@@ -90,6 +91,7 @@ public final class RulesCli {
             case "flood" -> exit = flood(engine, report);
             case "nicks" -> exit = nicks(engine, report);
             case "ranks" -> exit = ranks(report);
+            case "proof" -> exit = proof(report);
             default -> {
                 usage();
                 exit = 2;
@@ -421,6 +423,45 @@ public final class RulesCli {
         return ok ? 0 : 1;
     }
 
+    /**
+     * Проверка буфера чата: за флуд в протокол обязаны попасть все повторы,
+     * иначе наказание нечем подтвердить.
+     */
+    private static int proof(Report report) {
+        ChatLogBuffer buffer = new ChatLogBuffer(100);
+        long base = 1_000_000_000L;
+        buffer.add(base, "Flooder » продам сет", "Flooder");
+        buffer.add(base + 5_000, "Other » привет", "Other");
+        buffer.add(base + 20_000, "Flooder » продам сет", "Flooder");
+        buffer.add(base + 40_000, "Flooder » продам сет", "Flooder");
+        buffer.add(base + 200_000, "Flooder » это было давно", "Flooder");
+        long now = base + 45_000;
+
+        int failed = 0;
+        List<ChatLogBuffer.Line> own = buffer.byPlayer("Flooder", 60, now);
+        failed += expect(report, "все 3 повтора за окно 60 сек", own.size(), 3);
+
+        List<ChatLogBuffer.Line> other = buffer.byPlayer("flooder", 60, now);
+        failed += expect(report, "ник без учёта регистра", other.size(), 3);
+
+        List<ChatLogBuffer.Line> narrow = buffer.byPlayer("Flooder", 30, now);
+        failed += expect(report, "окно 30 сек отсекает раннее", narrow.size(), 2);
+
+        failed += expect(report, "контекст берёт все строки", buffer.tail(40).size(), 5);
+        failed += expect(report, "контекст ограничен запросом", buffer.tail(2).size(), 2);
+
+        report.line("");
+        report.line("провалено: " + failed);
+        System.out.println("PROOF " + (failed == 0 ? "PASS" : "FAIL") + " failed=" + failed);
+        return failed == 0 ? 0 : 1;
+    }
+
+    private static int expect(Report report, String what, int actual, int expected) {
+        boolean ok = actual == expected;
+        report.line((ok ? "ok    " : "FAIL  ") + pad(what, 40) + actual + ", ожидалось " + expected);
+        return ok ? 0 : 1;
+    }
+
     /** Показывает все нормализованные варианты — так видно, почему обход не совпал. */
     private static int norm(String text, Report report) {
         if (text.isBlank()) {
@@ -512,6 +553,7 @@ public final class RulesCli {
   flood                  proverka detektora fluda (zavisit ot istorii)
   nicks                  proverka: niki igrokov ne schitayutsya narusheniem
   ranks                  proverka: sostav ne trogaem, mediynym potolok muta
+  proof                  proverka bufera chata dlya protokolov nakazaniy
 
                 Opcii: --rules <path> --cases <path> --out <path>
                 Otchet pishetsya v fail v UTF-8 (--out, default build/rules-report.txt).

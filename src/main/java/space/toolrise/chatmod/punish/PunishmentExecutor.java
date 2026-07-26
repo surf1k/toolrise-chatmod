@@ -108,6 +108,13 @@ public final class PunishmentExecutor {
             log(auto ? "авто" : "вручную", nick, ruleInfo, time, command,
                     message == null ? "" : message.body());
         }
+
+        java.nio.file.Path proof = mod.evidence()
+                .record(message, nick, time, reason, ruleInfo, auto, command);
+        if (proof != null) {
+            feedback(Component.literal("протокол: " + proof.getFileName())
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_GRAY)));
+        }
         return true;
     }
 

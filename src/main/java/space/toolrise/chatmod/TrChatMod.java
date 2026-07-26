@@ -21,6 +21,8 @@ import space.toolrise.chatmod.chat.FlaggedMessageStore;
 import space.toolrise.chatmod.command.ModCommands;
 import space.toolrise.chatmod.config.ConfigManager;
 import space.toolrise.chatmod.config.ModConfig;
+import space.toolrise.chatmod.evidence.ChatLogBuffer;
+import space.toolrise.chatmod.evidence.EvidenceRecorder;
 import space.toolrise.chatmod.punish.PunishmentExecutor;
 import space.toolrise.chatmod.rules.MessageHistory;
 import space.toolrise.chatmod.rules.RuleEngine;
@@ -49,6 +51,8 @@ public final class TrChatMod implements ClientModInitializer {
     private PunishmentExecutor executor;
     private ChatHandler chatHandler;
     private AutoModerator autoModerator;
+    private ChatLogBuffer chatLog = new ChatLogBuffer(300);
+    private EvidenceRecorder evidence;
 
     public static TrChatMod get() {
         return instance;
@@ -63,6 +67,7 @@ public final class TrChatMod implements ClientModInitializer {
 
         rebuildRuntime();
 
+        evidence = new EvidenceRecorder(this);
         executor = new PunishmentExecutor(this);
         autoModerator = new AutoModerator(this);
         chatHandler = new ChatHandler(this);
@@ -77,6 +82,7 @@ public final class TrChatMod implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             history.clear();
             store.clear();
+            chatLog.clear();
             autoModerator.reset();
         });
 
@@ -137,6 +143,7 @@ public final class TrChatMod implements ClientModInitializer {
         } else {
             store.setCapacity(config.maxStoredMessages);
         }
+        chatLog.setCapacity(config.chatLogBufferSize);
     }
 
     public ConfigManager configManager() {
@@ -169,5 +176,13 @@ public final class TrChatMod implements ClientModInitializer {
 
     public AutoModerator autoModerator() {
         return autoModerator;
+    }
+
+    public ChatLogBuffer chatLog() {
+        return chatLog;
+    }
+
+    public EvidenceRecorder evidence() {
+        return evidence;
     }
 }

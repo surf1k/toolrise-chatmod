@@ -95,6 +95,18 @@ public final class ModCommands {
                                     info(ctx.getSource(), "Игнор-лист очищен (" + n + ")");
                                     return 1;
                                 })))
+                .then(ClientCommandManager.literal("proof")
+                        .executes(ctx -> {
+                            java.nio.file.Path dir = mod.evidence().directory();
+                            info(ctx.getSource(), "Протоколы наказаний: " + dir);
+                            try {
+                                java.nio.file.Files.createDirectories(dir);
+                                net.minecraft.util.Util.getPlatform().openFile(dir.toFile());
+                            } catch (Exception e) {
+                                TrChatMod.LOGGER.warn("Папку протоколов открыть не удалось", e);
+                            }
+                            return 1;
+                        }))
                 .then(ClientCommandManager.literal("config")
                         .executes(ctx -> {
                             info(ctx.getSource(), "Файлы: " + mod.configManager().directory());
@@ -406,6 +418,7 @@ public final class ModCommands {
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " parse <строка> — как мод разбирает строку чата"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " list — последние помеченные сообщения"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " ignore add|remove|list <ник> — не проверять игрока"));
+        source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " proof — открыть папку протоколов наказаний"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " config — путь к файлам настроек"));
         return 1;
     }

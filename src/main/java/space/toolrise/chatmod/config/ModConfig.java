@@ -165,6 +165,33 @@ public class ModConfig {
     /** Писать выданные наказания в config/trchatmod/punishments.csv. */
     public boolean logPunishments = true;
 
+    // ------------------------------------------------------ доказательства
+
+    /** Сохранять протокол на каждое выданное наказание. */
+    public boolean saveEvidence = true;
+
+    /** Папка протоколов внутри .minecraft. */
+    public String evidenceDir = "trmod";
+
+    /** Сколько строк чата вокруг события класть в протокол. */
+    public int evidenceContextLines = 40;
+
+    /**
+     * За сколько секунд собирать все реплики нарушителя. За флуд по правилам
+     * нужны все повторы, а они укладываются в минуту.
+     */
+    public int evidenceWindowSeconds = 120;
+
+    /**
+     * Прикладывать скриншот. Помогает не всегда: чат гаснет через несколько
+     * секунд, а автомат выдаёт мут с задержкой — в кадре нужной строки может
+     * уже не быть. Текстовый протокол надёжнее.
+     */
+    public boolean saveScreenshot = true;
+
+    /** Сколько строк чата держать в памяти для протоколов. */
+    public int chatLogBufferSize = 300;
+
     /** Проверять системные сообщения (чат серверных плагинов приходит именно так). */
     public boolean scanSystemMessages = true;
 

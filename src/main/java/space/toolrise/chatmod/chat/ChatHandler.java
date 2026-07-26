@@ -150,6 +150,9 @@ public final class ChatHandler {
 
         ChatParser.Parsed parsed = mod.parser().parse(clean);
         String nick = senderHint != null && !senderHint.isBlank() ? senderHint : parsed.nick();
+
+        // В буфер кладём вообще всё: протоколу нужен контекст, а не только нарушения.
+        mod.chatLog().add(System.currentTimeMillis(), clean, nick);
         String body = parsed.body();
         int bodyStart = parsed.bodyStart();
 
