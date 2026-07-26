@@ -31,7 +31,10 @@ CLEAN|GG всем
 
 # ===================== 2.1 оскорбления =====================
 FLAG 2.1|ты тварь
-FLAG 2.1|иди нахуй
+CLEAN|иди нахуй
+CLEAN|сам иди нахуй
+CLEAN|иди нахуй пес
+FLAG 2.1|иди нахуй тварь
 FLAG 2.1|ты пидoрас
 FLAG 2.1|гандон ты
 FLAG 2.1|мразь конченый
@@ -59,7 +62,7 @@ FLAG 2.1|тв*арь ты
 CLEAN|х.у.й ты
 FLAG 2.1|shalava
 FLAG 2.1|pidoras
-FLAG 2.1|idi nahui
+CLEAN|idi nahui
 FLAG 2.1|loshara
 FLAG 2.1|chmo
 CLEAN|х.у.й
