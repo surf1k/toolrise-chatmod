@@ -83,6 +83,16 @@ public final class ModCommands {
                             mod.autoModerator().setActive(true);
                             return 1;
                         }))
+                        .then(ClientCommandManager.literal("delay")
+                                .executes(ctx -> {
+                                    info(ctx.getSource(), "Пауза перед выдачей: "
+                                            + mod.config().autoDelaySeconds + " сек");
+                                    return 1;
+                                })
+                                .then(ClientCommandManager.argument("seconds",
+                                                IntegerArgumentType.integer(0, 3600))
+                                        .executes(ctx -> setDelay(mod, ctx.getSource(),
+                                                IntegerArgumentType.getInteger(ctx, "seconds")))))
                         .then(ClientCommandManager.literal("dry")
                                 .executes(ctx -> setDryRun(mod, ctx.getSource(), !mod.config().autoDryRun))
                                 .then(ClientCommandManager.literal("on")
@@ -200,6 +210,15 @@ public final class ModCommands {
         return 1;
     }
 
+    private static int setDelay(TrChatMod mod, FabricClientCommandSource source, int seconds) {
+        mod.config().autoDelaySeconds = seconds;
+        mod.configManager().saveConfig();
+        info(source, seconds == 0
+                ? "Пауза выключена — автомат выдаёт сразу"
+                : "Пауза перед выдачей: " + seconds + " сек (за это время модератор может выдать сам)");
+        return 1;
+    }
+
     private static int autoStatus(TrChatMod mod, FabricClientCommandSource source) {
         var auto = mod.autoModerator();
         var config = mod.config();
@@ -207,6 +226,8 @@ public final class ModCommands {
                 + (auto.isDryRun() ? " (тестовый режим)" : ""));
         source.sendFeedback(grey("  потолок: " + config.autoMaxMute
                 + " — всё строже уходит в очередь"));
+        source.sendFeedback(grey("  пауза перед выдачей: " + config.autoDelaySeconds
+                + " сек, ждёт сейчас: " + auto.pending().size()));
         source.sendFeedback(grey("  лимит: " + config.autoMaxPerMinute + "/мин, кулдаун на игрока: "
                 + config.autoCooldownSeconds + " сек"));
         source.sendFeedback(grey("  выдано: " + auto.issuedCount()
@@ -260,6 +281,7 @@ public final class ModCommands {
         info(source, "Команды:");
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " auto [on|off|dry] — автомат (кнопка F8)"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " queue [clear] — очередь на ручную проверку (F9)"));
+        source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " auto delay <сек> — пауза перед выдачей"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " pending — что автомат сейчас держит на паузе"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " cancel [id] — снять отложенную выдачу"));
         source.sendFeedback(grey("  /" + TrChatMod.COMMAND + " undo [n] — снять последние автомуты"));
