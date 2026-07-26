@@ -112,8 +112,16 @@ public final class PunishmentExecutor {
         java.nio.file.Path proof = mod.evidence()
                 .record(message, nick, time, reason, ruleInfo, auto, command);
         if (proof != null) {
-            feedback(Component.literal("протокол: " + proof.getFileName())
-                    .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_GRAY)));
+            // Путь к папке игры зависит от лаунчера, поэтому не заставляем его искать:
+            // рядом с протоколом всегда лежит кнопка, которая её открывает.
+            feedback(Component.literal("протокол: " + proof.getFileName() + " ")
+                    .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_GRAY))
+                    .append(Component.literal("[открыть папку]")
+                            .withStyle(Style.EMPTY
+                                    .withColor(ChatFormatting.AQUA)
+                                    .withUnderlined(true)
+                                    .withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(
+                                            "/" + TrChatMod.COMMAND + " proof")))));
         }
         return true;
     }

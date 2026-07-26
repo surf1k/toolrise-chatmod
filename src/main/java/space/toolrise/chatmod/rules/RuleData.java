@@ -23,9 +23,9 @@ public class RuleData {
         public int capsMinLength = 8;
         public double capsRatio = 0.7;
         public int repeatCharThreshold = 8;
-        /** Флуд по определению проекта: 3 и более одинаковых сообщений за минуту. */
+        /** Флуд по определению проекта: 4 и более одинаковых сообщений за минуту. */
         public int spamWindowSeconds = 60;
-        public int spamRepeatCount = 3;
+        public int spamRepeatCount = 4;
         /** Отдельный детектор быстрого потока разных сообщений — не то же самое, что флуд. */
         public int floodWindowSeconds = 10;
         public int floodMessageCount = 8;

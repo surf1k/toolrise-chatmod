@@ -30,7 +30,7 @@
     "capsRatio": 0.7,
     "repeatCharThreshold": 8,
     "spamWindowSeconds": 60,
-    "spamRepeatCount": 3,
+    "spamRepeatCount": 4,
     "floodWindowSeconds": 10,
     "floodMessageCount": 8,
     "adWhitelist": [
@@ -222,7 +222,7 @@
     {
       "id": "2.0",
       "name": "Капс / спам / флуд / попрошайничество",
-      "description": "Запрещены сообщения типа: капс, спам, флуд, попрошайничество. Флуд = 3 и более одинаковых сообщений за минуту (settings.spamRepeatCount / spamWindowSeconds)",
+      "description": "Запрещены сообщения типа: капс, спам, флуд, попрошайничество. Флуд = 4 и более одинаковых сообщений за минуту (settings.spamRepeatCount / spamWindowSeconds)",
       "mute": "10m",
       "enabled": true,
       "phrases": ["@begging"],

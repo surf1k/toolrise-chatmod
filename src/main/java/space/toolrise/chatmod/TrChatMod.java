@@ -86,6 +86,7 @@ public final class TrChatMod implements ClientModInitializer {
             autoModerator.reset();
         });
 
+        LOGGER.info("Протоколы наказаний: {}", evidence.directory().toAbsolutePath());
         LOGGER.info("{} запущен. Правил: {}, паттернов: {}, автомат: {}",
                 MOD_NAME, configManager.engine().ruleCount(), configManager.engine().patternCount(),
                 config().autoMode ? "включён" : "выключен");

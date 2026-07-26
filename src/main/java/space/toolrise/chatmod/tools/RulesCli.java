@@ -295,17 +295,21 @@ public final class RulesCli {
         report.line("");
 
         int failed = 0;
-        failed += floodCase(engine, report, "2 одинаковых в пределах окна",
-                new String[]{"привет", "привет"}, new long[]{0, 5_000}, false);
-        failed += floodCase(engine, report, "3 одинаковых в пределах окна",
-                new String[]{"привет", "привет", "привет"}, new long[]{0, 20_000, 50_000}, true);
-        failed += floodCase(engine, report, "3 одинаковых, но растянутые за окно",
-                new String[]{"привет", "привет", "привет"}, new long[]{0, 45_000, 90_000}, false);
-        failed += floodCase(engine, report, "3 разных сообщения",
-                new String[]{"привет", "как дела", "го пвп"}, new long[]{0, 10_000, 20_000}, false);
-        failed += floodCase(engine, report, "3 одинаковых с разным регистром и знаками",
-                new String[]{"кто продаст сет", "КТО ПРОДАСТ СЕТ", "кто продаст сет!!"},
-                new long[]{0, 10_000, 20_000}, true);
+        failed += floodCase(engine, report, "3 одинаковых в пределах окна — ещё не флуд",
+                new String[]{"привет", "привет", "привет"},
+                new long[]{0, 10_000, 20_000}, false);
+        failed += floodCase(engine, report, "4 одинаковых в пределах окна",
+                new String[]{"привет", "привет", "привет", "привет"},
+                new long[]{0, 15_000, 30_000, 50_000}, true);
+        failed += floodCase(engine, report, "4 одинаковых, но растянутые за окно",
+                new String[]{"привет", "привет", "привет", "привет"},
+                new long[]{0, 30_000, 61_000, 95_000}, false);
+        failed += floodCase(engine, report, "4 разных сообщения",
+                new String[]{"привет", "как дела", "го пвп", "я в аду"},
+                new long[]{0, 10_000, 20_000, 30_000}, false);
+        failed += floodCase(engine, report, "4 одинаковых с разным регистром и знаками",
+                new String[]{"кто продаст сет", "КТО ПРОДАСТ СЕТ", "кто продаст сет!!", "Кто продаст сет..."},
+                new long[]{0, 10_000, 20_000, 30_000}, true);
 
         report.line("");
         report.line("провалено: " + failed);
