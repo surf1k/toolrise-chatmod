@@ -64,6 +64,7 @@ public class ModConfig {
     ));
 
     /** Ники, которые не проверяются никогда (например, боты). */
+    @FullOnly
     public List<String> ignoredNicks = new ArrayList<>();
 
     public HighlightMode highlightMode = HighlightMode.FULL_LINE;
@@ -75,6 +76,7 @@ public class ModConfig {
     public boolean showRuleIdInMarker = true;
 
     /** Дописывать к помеченному сообщению кнопку [игнор] — добавить игрока в игнор одним кликом. */
+    @FullOnly
     public boolean showIgnoreButton = true;
 
     /** Звук при обнаружении нарушения. */
@@ -101,27 +103,30 @@ public class ModConfig {
      */
     public String reasonTemplate = "{ruleId}";
 
-    /** Шаблон снятия мута для {@code /trchatmod undo}. Плейсхолдер: {@code {player}}. */
-    public String unmuteCommand = "unmute {player}";
-
     // ------------------------------------------------------------ автомат
 
     /** Автоматическая выдача мутов. Включается кнопкой (по умолчанию F8) или /trchatmod auto. */
+    @FullOnly
     public boolean autoMode = false;
 
     /** Тестовый прогон: автомат всё считает и пишет в чат, но команду не отправляет. */
+    @FullOnly
     public boolean autoDryRun = false;
 
     /**
-     * Потолок для автомата. Всё, что строже, уходит в очередь на ручную проверку
-     * (/trchatmod queue). Поставь {@code permanent}, чтобы автомат выдавал вообще всё.
+     * Потолок для автомата. Всё, что строже, автомат не берёт — такое сообщение
+     * остаётся модератору: оно подсвечено, мут по клику. Поставь {@code permanent},
+     * чтобы автомат выдавал вообще всё.
      */
+    @FullOnly
     public String autoMaxMute = "4h";
 
     /** Номера правил, которые автомат не трогает никогда, даже в пределах потолка. */
+    @FullOnly
     public List<String> autoSkipRules = new ArrayList<>();
 
     /** Не наказывать автоматом, если ника нет в списке игроков онлайн. */
+    @FullOnly
     public boolean autoRequireOnlineNick = true;
 
     /**
@@ -132,6 +137,7 @@ public class ModConfig {
      * <p>Если за это время игрока накажет человек, отложенная выдача снимается.
      * {@code 0} — выдавать сразу.
      */
+    @FullOnly
     public int autoDelaySeconds = 30;
 
     /**
@@ -139,47 +145,57 @@ public class ModConfig {
      * Мут, выданный через этот же мод, снимается всегда; здесь речь про
      * наказания от других модераторов, замеченные по объявлению в чате.
      */
+    @FullOnly
     public boolean autoCancelIfPunishedByOther = true;
 
     /**
      * По каким строкам чата видно, что игрока уже наказали. Строка должна
      * содержать и ник, и совпадение с одним из шаблонов.
      */
+    @FullOnly
     public List<String> autoPunishBroadcastPatterns = new ArrayList<>(List.of(
             "(?i)\\b(замучен|замутил|выдал\\s+мут|выдан\\s+мут|получил\\s+мут|muted|наказан)\\b",
             "(?i)\\b(забанен|забанил|выдал\\s+бан|выдан\\s+бан|banned)\\b"
     ));
 
     /** Не наказывать одного и того же игрока чаще, чем раз в столько секунд. */
+    @FullOnly
     public int autoCooldownSeconds = 90;
 
-    /** Предохранитель: больше стольких автомутов в минуту — остальное в очередь. */
+    /** Предохранитель: больше стольких автомутов в минуту — остальное модератору. */
+    @FullOnly
     public int autoMaxPerMinute = 6;
 
     /** Строки чата, по которым автомат не срабатывает никогда (эхо самого плагина наказаний). */
+    @FullOnly
     public List<String> autoSkipLinePatterns = new ArrayList<>(List.of(
             "(?i)\\b(замучен|размучен|выдан\\s+мут|получил\\s+мут|muted|unmuted|наказан)\\b",
             "(?i)\\b(забанен|выдан\\s+бан|banned)\\b"
     ));
 
     /** Писать выданные наказания в config/trchatmod/punishments.csv. */
+    @FullOnly
     public boolean logPunishments = true;
 
     // ------------------------------------------------------ доказательства
 
     /** Сохранять протокол на каждое выданное наказание. */
+    @FullOnly
     public boolean saveEvidence = true;
 
     /** Папка протоколов внутри .minecraft. */
+    @FullOnly
     public String evidenceDir = "trmod";
 
     /** Сколько строк чата вокруг события класть в протокол. */
+    @FullOnly
     public int evidenceContextLines = 40;
 
     /**
      * За сколько секунд собирать все реплики нарушителя. За флуд по правилам
      * нужны все повторы, а они укладываются в минуту.
      */
+    @FullOnly
     public int evidenceWindowSeconds = 120;
 
     /**
@@ -187,9 +203,19 @@ public class ModConfig {
      * секунд, а автомат выдаёт мут с задержкой — в кадре нужной строки может
      * уже не быть. Текстовый протокол надёжнее.
      */
+    @FullOnly
     public boolean saveScreenshot = true;
 
+    /**
+     * Пауза перед снимком, мс. Без неё кадр берётся в том же тике, в котором ушла
+     * команда мута, и чат на нём ещё пустой — не видно ни нарушения, ни подтверждения.
+     * {@code 0} — снимать сразу.
+     */
+    @FullOnly
+    public int screenshotDelayMillis = 1000;
+
     /** Сколько строк чата держать в памяти для протоколов. */
+    @FullOnly
     public int chatLogBufferSize = 300;
 
     /** Проверять системные сообщения (чат серверных плагинов приходит именно так). */
@@ -246,10 +272,6 @@ public class ModConfig {
                 .replace("{time}", time == null ? "" : time)
                 .replace("{reason}", reason == null ? "" : reason)
                 .trim();
-    }
-
-    public String buildUnmuteCommand(String player) {
-        return unmuteCommand.replace("{player}", player == null ? "" : player).trim();
     }
 
     public String buildReason(String ruleId, String ruleName, String ruleDesc) {

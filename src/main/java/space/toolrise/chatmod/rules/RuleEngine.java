@@ -76,6 +76,13 @@ public final class RuleEngine {
     private final List<CompiledPattern> exceptions;
     private final List<String> compileWarnings;
 
+    /**
+     * Служебные реплики вроде «спек» в нормализованном виде. Их повторы считаются
+     * по своему, куда более высокому порогу: в игре это просьба к модератору,
+     * а не флуд, и мут за третий повтор был бы наказанием за обращение к тебе же.
+     */
+    private final Set<String> spamLoose;
+
     private RuleEngine(RuleData data,
                        List<CompiledRule> rules,
                        List<CompiledPattern> exceptions,
@@ -84,6 +91,31 @@ public final class RuleEngine {
         this.rules = rules;
         this.exceptions = exceptions;
         this.compileWarnings = compileWarnings;
+        this.spamLoose = normalizedSet(data.settings.spamLoosePhrases);
+    }
+
+    /**
+     * Фразы приводятся к тому же виду, в котором сравниваются сообщения, — поэтому
+     * «спек» ловится и как «СПЕК», и как «с п е к», и как «спеккк», а «spec»
+     * достаточно написать латиницей один раз.
+     */
+    private static Set<String> normalizedSet(List<String> phrases) {
+        Set<String> out = new HashSet<>();
+        if (phrases == null) {
+            return out;
+        }
+        for (String phrase : phrases) {
+            if (phrase == null || phrase.isBlank()) {
+                continue;
+            }
+            String norm = TextNormalizer
+                    .normalize(phrase, TextNormalizer.Alphabet.CYRILLIC, TextNormalizer.Mode.SQUEEZE)
+                    .value();
+            if (!norm.isBlank()) {
+                out.add(norm);
+            }
+        }
+        return out;
     }
 
     public static RuleEngine compile(RuleData data) {
@@ -379,11 +411,11 @@ public final class RuleEngine {
         return null;
     }
 
-    private static String detectSpam(String body,
-                                     String sender,
-                                     MessageHistory history,
-                                     RuleData.Settings s,
-                                     long nowMillis) {
+    private String detectSpam(String body,
+                              String sender,
+                              MessageHistory history,
+                              RuleData.Settings s,
+                              long nowMillis) {
         if (history == null || sender == null || sender.isBlank()) {
             return null;
         }
@@ -391,20 +423,24 @@ public final class RuleEngine {
         if (norm.isBlank() || norm.length() < Math.max(0, s.spamMinLength)) {
             return null;
         }
+        boolean loose = spamLoose.contains(norm);
+        int threshold = loose ? Math.max(1, s.spamLooseRepeatCount) : s.spamRepeatCount;
         int n = history.repeatCount(sender, norm, s.spamWindowSeconds, nowMillis);
-        return n >= s.spamRepeatCount
+        return n >= threshold
                 ? "одно и то же сообщение " + n + " раз за " + s.spamWindowSeconds + " сек"
                 : null;
     }
 
-    private static String detectFlood(String sender,
-                                      MessageHistory history,
-                                      RuleData.Settings s,
-                                      long nowMillis) {
+    private String detectFlood(String sender,
+                               MessageHistory history,
+                               RuleData.Settings s,
+                               long nowMillis) {
         if (history == null || sender == null || sender.isBlank()) {
             return null;
         }
-        int n = history.messageCount(sender, s.floodWindowSeconds, nowMillis);
+        // Служебные реплики не считаются и здесь: иначе «спек» ловился бы по
+        // потоку сообщений раньше, чем дошёл бы до своего порога повторов.
+        int n = history.messageCount(sender, s.floodWindowSeconds, nowMillis, spamLoose);
         return n >= s.floodMessageCount
                 ? n + " сообщений за " + s.floodWindowSeconds + " сек"
                 : null;

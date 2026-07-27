@@ -8,6 +8,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import space.toolrise.chatmod.TrChatMod;
+import space.toolrise.chatmod.Variant;
 import space.toolrise.chatmod.config.ModConfig;
 import space.toolrise.chatmod.rules.Violation;
 
@@ -112,7 +113,8 @@ public final class ChatDecorator {
      * ClickEvent на дочернем элементе перекрывает клик всего сообщения.
      */
     private static void appendIgnoreButton(MutableComponent root, FlaggedMessage message, ModConfig config) {
-        if (!config.showIgnoreButton || message.nick() == null || message.nick().isBlank()) {
+        if (!Variant.FULL || !config.showIgnoreButton
+                || message.nick() == null || message.nick().isBlank()) {
             return;
         }
         root.append(Component.literal(" [игнор]")

@@ -5,8 +5,28 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 
+// Две сборки из одного кода:
+//   ./gradlew build                 — полная: автомат, очередь, протоколы, игнор
+//   ./gradlew build -Pvariant=lite  — лёгкая: подсветка, звук, подсказка, мут по клику
+//
+// Разница — ровно один каталог исходников: src/full или src/lite. Того, чего в
+// версии нет, нет и в jar: классы автомата и протоколов в лёгкую не компилируются.
+def lite = project.findProperty('variant') == 'lite'
+def variantDir = lite ? 'lite' : 'full'
+def modName = lite ? 'ToolRise ChatMod Lite' : 'ToolRise ChatMod'
+def modDescription = lite
+		? 'Лёгкая версия: подсвечивает нарушения красным, звук, подсказка с правилом, мут по клику.'
+		: 'Клиентский мод модерации чата для ToolRise: подсветка нарушений, автомат, протоколы наказаний.'
+
 base {
-	archivesName = project.archives_base_name
+	archivesName = lite ? "${project.archives_base_name}-lite" : project.archives_base_name
+}
+
+sourceSets {
+	main {
+		java.srcDir "src/${variantDir}/java"
+		resources.srcDir "src/${variantDir}/resources"
+	}
 }
 
 repositories {
@@ -35,7 +55,9 @@ processResources {
 	def props = [
 			version           : project.version,
 			minecraft_version : project.minecraft_version,
-			loader_version    : project.loader_version
+			loader_version    : project.loader_version,
+			mod_name          : modName,
+			mod_description   : modDescription
 	]
 	inputs.properties props
 

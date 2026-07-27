@@ -5,35 +5,32 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import space.toolrise.chatmod.auto.AutoModerator;
-import space.toolrise.chatmod.auto.PendingReview;
+import space.toolrise.chatmod.auto.AutoModeration;
 import space.toolrise.chatmod.chat.ChatHandler;
-import space.toolrise.chatmod.hud.AutoHud;
-import space.toolrise.chatmod.input.KeyBindings;
 import space.toolrise.chatmod.chat.ChatParser;
 import space.toolrise.chatmod.chat.FlaggedMessageStore;
 import space.toolrise.chatmod.command.ModCommands;
 import space.toolrise.chatmod.config.ConfigManager;
 import space.toolrise.chatmod.config.ModConfig;
-import space.toolrise.chatmod.evidence.ChatLogBuffer;
-import space.toolrise.chatmod.evidence.EvidenceRecorder;
+import space.toolrise.chatmod.evidence.Evidence;
 import space.toolrise.chatmod.punish.PunishmentExecutor;
 import space.toolrise.chatmod.rules.MessageHistory;
 import space.toolrise.chatmod.rules.RuleEngine;
-
-import java.util.List;
 
 /**
  * Клиентский мод модерации чата для ToolRise.
  *
  * <p>Ничего не отправляет на сервер сам по себе: проверка сообщений идёт локально,
- * команда мута уходит только по явному действию модератора.
+ * команда мута уходит только по явному действию модератора — а в полной версии
+ * ещё и по решению автомата, который включает сам модератор.
+ *
+ * <p>Чем полная версия отличается от лёгкой, целиком описано в {@code Variant}:
+ * он один разный в {@code src/full} и {@code src/lite}.
  */
 public final class TrChatMod implements ClientModInitializer {
 
@@ -50,9 +47,8 @@ public final class TrChatMod implements ClientModInitializer {
     private ChatParser parser = new ChatParser(new ModConfig().chatPatterns);
     private PunishmentExecutor executor;
     private ChatHandler chatHandler;
-    private AutoModerator autoModerator;
-    private ChatLogBuffer chatLog = new ChatLogBuffer(300);
-    private EvidenceRecorder evidence;
+    private AutoModeration auto;
+    private Evidence evidence;
 
     public static TrChatMod get() {
         return instance;
@@ -65,35 +61,43 @@ public final class TrChatMod implements ClientModInitializer {
         String report = configManager.load();
         LOGGER.info("Конфигурация загружена: {}", report);
 
-        rebuildRuntime();
+        ModConfig config = configManager.config();
+        parser = new ChatParser(config.chatPatterns);
+        store.setCapacity(config.maxStoredMessages);
 
-        evidence = new EvidenceRecorder(this);
+        evidence = Variant.evidence(this);
         executor = new PunishmentExecutor(this);
-        autoModerator = new AutoModerator(this);
+        auto = Variant.auto(this);
         chatHandler = new ChatHandler(this);
         chatHandler.register();
         ModCommands.register(this);
-        KeyBindings.register(this);
-        AutoHud.register(this);
+        Variant.registerExtras(this);
 
-        ClientTickEvents.END_CLIENT_TICK.register(client -> autoModerator.tick());
+        if (auto != null) {
+            ClientTickEvents.END_CLIENT_TICK.register(client -> auto.tick());
+        }
 
         // Один раз при заходе показываем, что реально включено. Без этого легко
         // обновить мод и не заметить, что правила читаются из старого конфига.
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> showStatus());
 
-        // История спама/флуда и счётчики автомата относятся к конкретному серверу.
+        // История спама, помеченные сообщения и счётчики автомата относятся
+        // к конкретному серверу.
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             history.clear();
             store.clear();
-            chatLog.clear();
-            autoModerator.reset();
+            if (evidence != null) {
+                evidence.clear();
+            }
+            if (auto != null) {
+                auto.reset();
+            }
         });
 
-        LOGGER.info("Протоколы наказаний: {}", evidence.directory().toAbsolutePath());
-        LOGGER.info("{} запущен. Правил: {}, паттернов: {}, автомат: {}",
-                MOD_NAME, configManager.engine().ruleCount(), configManager.engine().patternCount(),
-                config().autoMode ? "включён" : "выключен");
+        LOGGER.info("Настройки: {}", configManager.directory().toAbsolutePath());
+        LOGGER.info("{} ({}) запущен. Правил: {}, паттернов: {}",
+                MOD_NAME, Variant.NAME,
+                configManager.engine().ruleCount(), configManager.engine().patternCount());
     }
 
     /** Короткая строка «что сейчас включено» — печатается при заходе на сервер. */
@@ -112,68 +116,12 @@ public final class TrChatMod implements ClientModInitializer {
                 .append(Component.literal("правила v" + configManager.ruleData().schema
                                 + " · флуд " + settings.spamRepeatCount + "/" + settings.spamWindowSeconds + "с"
                                 + " · мат от " + matThreshold
-                                + " · автомат " + (config().autoMode
-                                        ? (config().autoDryRun ? "ТЕСТ" : "ВКЛ") : "выкл"))
-                        .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)))
-                .append(Component.literal(" [папка]")
-                        .withStyle(Style.EMPTY
-                                .withColor(ChatFormatting.DARK_GRAY)
-                                .withClickEvent(new ClickEvent.RunCommand("/" + COMMAND + " config")))));
+                                + Variant.statusSuffix(this))
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY))));
     }
 
-    /** Показывает очередь на ручную проверку. Вызывается кнопкой и командой. */
-    public void showQueue() {
-        Minecraft client = Minecraft.getInstance();
-        if (client.gui == null) {
-            return;
-        }
-        List<PendingReview> queue = autoModerator.queue();
-        if (queue.isEmpty()) {
-            client.gui.getChat().addMessage(prefix()
-                    .append(Component.literal("очередь пуста")
-                            .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY))));
-            return;
-        }
-        client.gui.getChat().addMessage(prefix()
-                .append(Component.literal("на ручную проверку: " + queue.size())
-                        .withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE))));
-        for (PendingReview review : queue) {
-            client.gui.getChat().addMessage(Component.literal("  " + review.message().nickOrUnknown() + " ")
-                    .withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE))
-                    .append(Component.literal("— " + review.reason() + " ")
-                            .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)))
-                    .append(Component.literal("[выдать]")
-                            .withStyle(Style.EMPTY
-                                    .withColor(ChatFormatting.AQUA)
-                                    .withUnderlined(true)
-                                    .withClickEvent(new ClickEvent.RunCommand(
-                                            "/" + COMMAND + " punish " + review.message().id())))));
-        }
-    }
-
-    private static MutableComponent prefix() {
-        return Component.literal("[Авто] ").withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD));
-    }
-
-    /** Перечитывает конфиг и правила с диска. Возвращает отчёт для чата. */
-    public String reload() {
-        String report = configManager.load();
-        rebuildRuntime();
-        if (autoModerator != null) {
-            autoModerator.recompile();
-        }
-        return report;
-    }
-
-    private void rebuildRuntime() {
-        ModConfig config = configManager.config();
-        parser = new ChatParser(config.chatPatterns);
-        if (store == null) {
-            store = new FlaggedMessageStore(config.maxStoredMessages);
-        } else {
-            store.setCapacity(config.maxStoredMessages);
-        }
-        chatLog.setCapacity(config.chatLogBufferSize);
+    public static MutableComponent prefix() {
+        return Component.literal("[ChatMod] ").withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD));
     }
 
     public ConfigManager configManager() {
@@ -204,15 +152,13 @@ public final class TrChatMod implements ClientModInitializer {
         return executor;
     }
 
-    public AutoModerator autoModerator() {
-        return autoModerator;
+    /** Автомат или {@code null} — в лёгкой версии его нет. */
+    public AutoModeration auto() {
+        return auto;
     }
 
-    public ChatLogBuffer chatLog() {
-        return chatLog;
-    }
-
-    public EvidenceRecorder evidence() {
+    /** Протоколы наказаний или {@code null} — в лёгкой версии их нет. */
+    public Evidence evidence() {
         return evidence;
     }
 }

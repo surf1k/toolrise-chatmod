@@ -141,6 +141,10 @@ public final class RulesCli {
             } else if (expect.toUpperCase().startsWith("FLAG")) {
                 String wanted = expect.length() > 4 ? expect.substring(4).strip() : "";
                 ok = wanted.isEmpty() ? !result.isClean() : ids.contains(wanted);
+            } else if (expect.toUpperCase().startsWith("NOT")) {
+                // Ловит не пропуск, а перебор: «сынок ты тварь» — это 2.1 на
+                // 30 минут, и правило про родню не должно поднимать его до 4 часов.
+                ok = !ids.contains(expect.substring(3).strip());
             } else {
                 report.line("НЕИЗВЕСТНОЕ ОЖИДАНИЕ «" + expect + "»: " + text);
                 failed++;
@@ -292,18 +296,23 @@ public final class RulesCli {
         RuleData.Settings s = engine.data().settings;
         report.line("определение флуда: " + s.spamRepeatCount
                 + " и более одинаковых сообщений за " + s.spamWindowSeconds + " сек");
+        report.line("служебные реплики " + s.spamLoosePhrases
+                + ": порог " + s.spamLooseRepeatCount + " за то же окно");
         report.line("");
 
         int failed = 0;
-        failed += floodCase(engine, report, "3 одинаковых в пределах окна — ещё не флуд",
+        failed += floodCase(engine, report, "2 одинаковых в пределах окна — ещё не флуд",
+                new String[]{"привет", "привет"},
+                new long[]{0, 10_000}, false);
+        failed += floodCase(engine, report, "3 одинаковых в пределах окна",
                 new String[]{"привет", "привет", "привет"},
-                new long[]{0, 10_000, 20_000}, false);
+                new long[]{0, 10_000, 20_000}, true);
         failed += floodCase(engine, report, "4 одинаковых в пределах окна",
                 new String[]{"привет", "привет", "привет", "привет"},
                 new long[]{0, 15_000, 30_000, 50_000}, true);
-        failed += floodCase(engine, report, "4 одинаковых, но растянутые за окно",
-                new String[]{"привет", "привет", "привет", "привет"},
-                new long[]{0, 30_000, 61_000, 95_000}, false);
+        failed += floodCase(engine, report, "3 одинаковых, но растянутые за окно",
+                new String[]{"привет", "привет", "привет"},
+                new long[]{0, 61_000, 130_000}, false);
         failed += floodCase(engine, report, "4 разных сообщения",
                 new String[]{"привет", "как дела", "го пвп", "я в аду"},
                 new long[]{0, 10_000, 20_000, 30_000}, false);
@@ -317,10 +326,63 @@ public final class RulesCli {
                 new String[]{"кто продаст сет", "КТО ПРОДАСТ СЕТ", "кто продаст сет!!", "Кто продаст сет..."},
                 new long[]{0, 10_000, 20_000, 30_000}, true);
 
+
+        // Служебные реплики: «спек» — это просьба к модератору, и мут за третий
+        // повтор был бы наказанием за обращение к самому же модератору.
+        failed += floodCase(engine, report, "«спек» 5 раз — не флуд",
+                repeat("спек", 5), everySeconds(5, 5), false);
+        failed += floodCase(engine, report, "«спек» 30 раз — всё ещё не флуд",
+                repeat("спек", 30), everySeconds(30, 2), false);
+        failed += floodCase(engine, report, "«спек» 31 раз за минуту — флуд",
+                repeat("спек", 31), everySeconds(31, 1), true);
+        failed += floodCase(engine, report, "«spec» латиницей 31 раз — флуд",
+                repeat("spec", 31), everySeconds(31, 1), true);
+        failed += floodCase(engine, report, "«СПЕК» и «с п е к» — тот же порог",
+                repeat("СПЕК", 20), everySeconds(20, 2), false);
+        failed += silentCase(engine, report, "«спек» 20 раз не ловится вообще ничем",
+                repeat("спек", 20), everySeconds(20, 1));
+        failed += floodCase(engine, report, "«дайте спек» — обычная реплика, порог 3",
+                repeat("дайте спек", 3), everySeconds(3, 10), true);
+
         report.line("");
         report.line("провалено: " + failed);
         System.out.println("FLOOD " + (failed == 0 ? "PASS" : "FAIL") + " failed=" + failed);
         return failed == 0 ? 0 : 1;
+    }
+
+    private static String[] repeat(String message, int times) {
+        String[] out = new String[times];
+        java.util.Arrays.fill(out, message);
+        return out;
+    }
+
+    private static long[] everySeconds(int times, int stepSeconds) {
+        long[] out = new long[times];
+        for (int i = 0; i < times; i++) {
+            out[i] = i * stepSeconds * 1000L;
+        }
+        return out;
+    }
+
+    /** Ни одно правило не должно сработать — ни повторы, ни поток сообщений. */
+    private static int silentCase(RuleEngine engine, Report report, String name,
+                                  String[] messages, long[] offsets) {
+        MessageHistory history = new MessageHistory();
+        long base = 1_000_000_000L;
+        List<String> hits = new ArrayList<>();
+        for (int i = 0; i < messages.length; i++) {
+            long now = base + offsets[i];
+            String norm = TextNormalizer.normalize(messages[i],
+                    TextNormalizer.Alphabet.CYRILLIC, TextNormalizer.Mode.SQUEEZE).value();
+            history.record("Flooder", norm, now);
+            for (Violation v : engine.scan(messages[i], "Flooder", history, now).violations()) {
+                hits.add(v.ruleId() + " " + String.join(", ", v.evidence()));
+            }
+        }
+        boolean ok = hits.isEmpty();
+        report.line((ok ? "ok    " : "FAIL  ") + name
+                + " -> " + (ok ? "чисто" : "сработало: " + hits));
+        return ok ? 0 : 1;
     }
 
     private static int floodCase(RuleEngine engine, Report report, String name,

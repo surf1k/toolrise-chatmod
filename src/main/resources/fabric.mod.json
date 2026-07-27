@@ -2,8 +2,8 @@
 	"schemaVersion": 1,
 	"id": "trchatmod",
 	"version": "${version}",
-	"name": "ToolRise ChatMod",
-	"description": "Клиентский мод модерации чата для ToolRise: подсвечивает нарушения красным и выдаёт мут по клику.",
+	"name": "${mod_name}",
+	"description": "${mod_description}",
 	"authors": [
 		"ToolRise"
 	],
