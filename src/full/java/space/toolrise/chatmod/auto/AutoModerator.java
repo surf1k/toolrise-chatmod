@@ -34,18 +34,17 @@ import java.util.regex.PatternSyntaxException;
  * нарушение — это одно грубое сообщение в чате, а ложное срабатывание — невиновный
  * игрок с мутом, которого никто не снимет, пока модератор спит. Поэтому:
  * <ul>
- *   <li>потолок строгости — самое тяжёлое уходит человеку в очередь;</li>
+ *   <li>потолок строгости — самое тяжёлое автомат не берёт;</li>
  *   <li>кулдаун на игрока — один инцидент не превращается в серию мутов;</li>
  *   <li>лимит в минуту — сломанное правило не выкосит весь сервер;</li>
  *   <li>ник обязан быть в списке онлайн — не наказываем разбор строки чата;</li>
  *   <li>эхо плагина наказаний игнорируется — иначе автомат зациклится сам на себе.</li>
  * </ul>
+ *
+ * <p>Всё, за что автомат не взялся, остаётся модератору обычным путём: сообщение
+ * подсвечено красным, мут выдаётся кликом. Отдельной очереди для этого нет.
  */
-public final class AutoModerator {
-
-    /** Запись о выданном автомате наказании — для {@code /trchatmod undo}. */
-    public record Issued(String nick, String ruleId, String time, long at) {
-    }
+public final class AutoModerator implements AutoModeration {
 
     /**
      * Наказание, назначенное автоматом, но ещё не отправленное: идёт отсчёт
@@ -63,13 +62,9 @@ public final class AutoModerator {
         }
     }
 
-    private static final int UNDO_HISTORY = 32;
-
     private final TrChatMod mod;
     private final Map<String, Long> lastPunishedAt = new HashMap<>();
     private final Deque<Long> issuedTimes = new ArrayDeque<>();
-    private final Deque<Issued> issued = new ArrayDeque<>();
-    private final List<PendingReview> queue = new ArrayList<>();
     private final List<Pending> pending = new ArrayList<>();
     private List<Pattern> skipLinePatterns = List.of();
     private List<Pattern> punishBroadcastPatterns = List.of();
@@ -82,8 +77,8 @@ public final class AutoModerator {
         recompile();
     }
 
-    /** Перечитывает то, что зависит от конфига. Вызывается после /trchatmod reload. */
-    public void recompile() {
+    /** Компилирует то, что зависит от конфига. */
+    private void recompile() {
         this.skipLinePatterns = compile(mod.config().autoSkipLinePatterns, "autoSkipLinePatterns");
         this.punishBroadcastPatterns =
                 compile(mod.config().autoPunishBroadcastPatterns, "autoPunishBroadcastPatterns");
@@ -115,16 +110,9 @@ public final class AutoModerator {
         return issuedCount;
     }
 
-    public int queueSize() {
-        return queue.size();
-    }
-
-    public List<PendingReview> queue() {
-        return List.copyOf(queue);
-    }
-
-    public void clearQueue() {
-        queue.clear();
+    /** Сколько наказаний сейчас ждёт отправки. */
+    public int pendingCount() {
+        return pending.size();
     }
 
     /** @return новое состояние */
@@ -174,6 +162,7 @@ public final class AutoModerator {
     // ------------------------------------------------------------- решение
 
     /** Главный вход: вызывается на каждое помеченное сообщение. */
+    @Override
     public void handle(FlaggedMessage message) {
         if (!isActive()) {
             return;
@@ -201,21 +190,21 @@ public final class AutoModerator {
 
         String nick = message.nick();
         if (nick == null || nick.isBlank()) {
-            enqueue(message, "не удалось определить ник");
+            skip(message, "не удалось определить ник");
             return;
         }
         if (config.autoRequireOnlineNick && !message.nickKnown()) {
-            enqueue(message, "ник «" + nick + "» не найден в списке онлайн");
+            skip(message, "ник «" + nick + "» не найден в списке онлайн");
             return;
         }
         if (config.autoSkipRules.contains(primary.ruleId())) {
-            enqueue(message, "правило " + primary.ruleId() + " исключено из автомата");
+            skip(message, "правило " + primary.ruleId() + " исключено из автомата");
             return;
         }
         // Ранг может сам ограничить срок: медийщикам больше 10 минут нельзя.
         MuteDuration wanted = RankPolicy.cap(primary.mute(), message.prefix(), config);
         if (wanted.compareTo(ceiling()) > 0) {
-            enqueue(message, "мут " + wanted.display()
+            skip(message, "мут " + wanted.display()
                     + " строже потолка " + ceiling().display());
             return;
         }
@@ -227,7 +216,7 @@ public final class AutoModerator {
             return;
         }
         if (!withinRateLimit(now, config)) {
-            enqueue(message, "превышен лимит " + config.autoMaxPerMinute + " наказаний в минуту");
+            skip(message, "превышен лимит " + config.autoMaxPerMinute + " наказаний в минуту");
             return;
         }
 
@@ -260,16 +249,12 @@ public final class AutoModerator {
         Pending item = new Pending(message, nick, time, reason, primary.shortLabel(),
                 now + delay * 1000L, now);
         pending.add(item);
+        // Отменить отложенную выдачу можно, выдав мут самому: ручная выдача
+        // снимает то, что автомат держит на этого игрока.
         announce(Component.literal("через " + delay + " сек: ")
                 .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY))
-                .append(Component.literal(nick + " — " + primary.shortLabel() + " — " + time + " ")
-                        .withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)))
-                .append(Component.literal("[отменить]")
-                        .withStyle(Style.EMPTY
-                                .withColor(ChatFormatting.AQUA)
-                                .withUnderlined(true)
-                                .withClickEvent(new ClickEvent.RunCommand(
-                                        "/" + TrChatMod.COMMAND + " cancel " + message.id())))));
+                .append(Component.literal(nick + " — " + primary.shortLabel() + " — " + time)
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.WHITE))));
     }
 
     private void send(FlaggedMessage message, String nick, String time, String reason,
@@ -278,10 +263,6 @@ public final class AutoModerator {
         client.execute(() -> {
             boolean ok = mod.executor().mute(message, nick, time, reason, ruleLabel, true);
             if (ok) {
-                issued.addLast(new Issued(nick, ruleLabel, time, System.currentTimeMillis()));
-                while (issued.size() > UNDO_HISTORY) {
-                    issued.removeFirst();
-                }
                 issuedCount++;
             } else {
                 // Команда не ушла — откатываем бронь, иначе игрок «съест» кулдаун зря.
@@ -294,6 +275,7 @@ public final class AutoModerator {
     // ----------------------------------------------------- отложенная выдача
 
     /** Вызывается каждый тик клиента: отправляет то, у чего вышла пауза. */
+    @Override
     public void tick() {
         if (pending.isEmpty()) {
             return;
@@ -316,30 +298,11 @@ public final class AutoModerator {
         }
     }
 
-    public List<Pending> pending() {
-        return List.copyOf(pending);
-    }
-
-    /** Снимает отложенную выдачу по номеру сообщения. @return был ли отменён */
-    public boolean cancel(int messageId) {
-        Pending found = null;
-        for (Pending p : pending) {
-            if (p.message().id() == messageId) {
-                found = p;
-                break;
-            }
-        }
-        if (found == null) {
-            return false;
-        }
-        drop(found, "отменено вручную");
-        return true;
-    }
-
     /** Снимает отложенную выдачу по игроку — например, когда его наказал человек. */
-    public int cancelFor(String nick, String why) {
+    @Override
+    public void cancelFor(String nick, String why) {
         if (nick == null || nick.isBlank() || pending.isEmpty()) {
-            return 0;
+            return;
         }
         String key = nick.toLowerCase(Locale.ROOT);
         List<Pending> hit = new ArrayList<>();
@@ -349,13 +312,13 @@ public final class AutoModerator {
             }
         }
         hit.forEach(p -> drop(p, why));
-        return hit.size();
     }
 
     /**
-     * Смотрит строку чата: если это объявление о наказании и в нём есть игрок
-     * из очереди — значит, человек успел раньше, автомат отходит в сторону.
+     * Смотрит строку чата: если это объявление о наказании и в нём есть игрок,
+     * которого автомат держит на паузе — значит, человек успел раньше.
      */
+    @Override
     public void observeChatLine(String line) {
         if (pending.isEmpty() || line == null || line.isBlank()
                 || !mod.config().autoCancelIfPunishedByOther) {
@@ -401,12 +364,13 @@ public final class AutoModerator {
         return MuteDuration.parse(mod.config().autoMaxMute);
     }
 
-    private void enqueue(FlaggedMessage message, String reason) {
-        queue.add(new PendingReview(message, reason, System.currentTimeMillis()));
-        while (queue.size() > 64) {
-            queue.remove(0);
-        }
-        announce(Component.literal("на проверку: ")
+    /**
+     * Автомат за это не берётся. Отдельной очереди нет: сообщение уже подсвечено
+     * красным и кликабельно, поэтому достаточно сказать, почему решение за человеком.
+     */
+    private void skip(FlaggedMessage message, String reason) {
+        skippedCount++;
+        announce(Component.literal("решай сам: ")
                 .withStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW))
                 .append(Component.literal(message.nickOrUnknown() + " — " + reason + " ")
                         .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)))
@@ -418,45 +382,13 @@ public final class AutoModerator {
                                         "/" + TrChatMod.COMMAND + " punish " + message.id())))));
     }
 
-    // ---------------------------------------------------------------- undo
-
-    /** Снимает последние {@code count} автоматических мутов. @return сколько снято */
-    public int undo(int count) {
-        ModConfig config = mod.config();
-        Minecraft client = Minecraft.getInstance();
-        if (client.getConnection() == null) {
-            return 0;
-        }
-        int done = 0;
-        for (int i = 0; i < count && !issued.isEmpty(); i++) {
-            Issued last = issued.removeLast();
-            String command = config.buildUnmuteCommand(last.nick());
-            if (command.isBlank()) {
-                continue;
-            }
-            if (command.startsWith("/")) {
-                command = command.substring(1);
-            }
-            client.getConnection().sendCommand(command);
-            lastPunishedAt.remove(last.nick().toLowerCase(Locale.ROOT));
-            TrChatMod.LOGGER.info("Отмена автомута: /{}", command);
-            done++;
-        }
-        return done;
-    }
-
-    public List<Issued> recentIssued() {
-        return List.copyOf(issued);
-    }
-
     // -------------------------------------------------------------- прочее
 
+    @Override
     public void reset() {
         pending.clear();
         lastPunishedAt.clear();
         issuedTimes.clear();
-        issued.clear();
-        queue.clear();
         issuedCount = 0;
         skippedCount = 0;
     }

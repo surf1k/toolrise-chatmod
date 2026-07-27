@@ -3,34 +3,26 @@ package space.toolrise.chatmod.punish;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import space.toolrise.chatmod.TrChatMod;
 import space.toolrise.chatmod.chat.FlaggedMessage;
 import space.toolrise.chatmod.chat.RankPolicy;
 import space.toolrise.chatmod.config.ModConfig;
+import space.toolrise.chatmod.evidence.Evidence;
 import space.toolrise.chatmod.rules.MuteDuration;
 import space.toolrise.chatmod.rules.Violation;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 /**
- * Отправка команды наказания и запись в журнал.
+ * Отправка команды наказания.
  *
- * <p>Команда уходит ровно один раз и только по явному действию модератора:
- * ни один автоматический путь сюда не ведёт.
+ * <p>Команда уходит ровно один раз: либо по явному действию модератора, либо
+ * по решению автомата, который включает сам модератор.
  */
 public final class PunishmentExecutor {
-
-    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String CSV_HEADER =
-            "время;источник;модератор;нарушитель;правило;срок;команда;сообщение";
 
     private final TrChatMod mod;
 
@@ -56,14 +48,14 @@ public final class PunishmentExecutor {
     }
 
     /**
-     * Выдаёт мут вручную заданными параметрами.
+     * Выдаёт мут заданными параметрами.
      *
-     * @param message  исходное сообщение (для журнала), может быть {@code null}
+     * @param message  исходное сообщение (для протокола), может быть {@code null}
      * @param nick     ник нарушителя
      * @param time     срок в том виде, в каком его ждёт серверная команда
      * @param reason   причина
-     * @param ruleInfo что записать в журнал в колонку «правило»
-     * @param auto     выдано автоматом, а не человеком — попадёт в журнал и в текст в чате
+     * @param ruleInfo что записать в протокол в колонку «правило»
+     * @param auto     выдано автоматом, а не человеком — попадёт в протокол и в текст в чате
      */
     public boolean mute(FlaggedMessage message, String nick, String time, String reason,
                         String ruleInfo, boolean auto) {
@@ -90,9 +82,9 @@ public final class PunishmentExecutor {
             command = command.substring(1);
         }
 
-        if (!auto && mod.autoModerator() != null) {
+        if (!auto && mod.auto() != null) {
             // Человек успел раньше — снимаем то, что автомат собирался выдать сам.
-            mod.autoModerator().cancelFor(nick, "модератор выдал вручную");
+            mod.auto().cancelFor(nick, "модератор выдал вручную");
         }
 
         connection.sendCommand(command);
@@ -104,24 +96,21 @@ public final class PunishmentExecutor {
                 .append(Component.literal(" — " + time + " — " + reason)
                         .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY))));
 
-        if (mod.config().logPunishments) {
-            log(auto ? "авто" : "вручную", nick, ruleInfo, time, command,
-                    message == null ? "" : message.body());
-        }
-
-        java.nio.file.Path proof = mod.evidence()
-                .record(message, nick, time, reason, ruleInfo, auto, command);
-        if (proof != null) {
-            // Путь к папке игры зависит от лаунчера, поэтому не заставляем его искать:
-            // рядом с протоколом всегда лежит кнопка, которая её открывает.
-            feedback(Component.literal("протокол: " + proof.getFileName() + " ")
-                    .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_GRAY))
-                    .append(Component.literal("[открыть папку]")
-                            .withStyle(Style.EMPTY
-                                    .withColor(ChatFormatting.AQUA)
-                                    .withUnderlined(true)
-                                    .withClickEvent(new net.minecraft.network.chat.ClickEvent.RunCommand(
-                                            "/" + TrChatMod.COMMAND + " proof")))));
+        Evidence evidence = mod.evidence();
+        if (evidence != null) {
+            Path proof = evidence.record(message, nick, time, reason, ruleInfo, auto, command);
+            if (proof != null) {
+                // Путь к папке игры зависит от лаунчера, поэтому не заставляем его искать:
+                // рядом с протоколом всегда лежит кнопка, которая её открывает.
+                feedback(Component.literal("протокол: " + proof.getFileName() + " ")
+                        .withStyle(Style.EMPTY.withColor(ChatFormatting.DARK_GRAY))
+                        .append(Component.literal("[открыть папку]")
+                                .withStyle(Style.EMPTY
+                                        .withColor(ChatFormatting.AQUA)
+                                        .withUnderlined(true)
+                                        .withClickEvent(new ClickEvent.RunCommand(
+                                                "/" + TrChatMod.COMMAND + " proof")))));
+            }
         }
         return true;
     }
@@ -130,46 +119,10 @@ public final class PunishmentExecutor {
         return duration.isPermanent() ? config.permanentToken : duration.raw();
     }
 
-    private void log(String source, String nick, String ruleInfo, String time, String command, String body) {
-        Path file = mod.configManager().directory().resolve("punishments.csv");
-        String moderator = Minecraft.getInstance().player == null
-                ? "?" : Minecraft.getInstance().player.getGameProfile().name();
-        String row = String.join(";",
-                STAMP.format(LocalDateTime.now()),
-                csv(source),
-                csv(moderator),
-                csv(nick),
-                csv(ruleInfo),
-                csv(time),
-                csv("/" + command),
-                csv(body));
-        try {
-            Files.createDirectories(file.getParent());
-            if (Files.notExists(file)) {
-                Files.writeString(file, CSV_HEADER + System.lineSeparator(),
-                        StandardCharsets.UTF_8, StandardOpenOption.CREATE);
-            }
-            Files.writeString(file, row + System.lineSeparator(),
-                    StandardCharsets.UTF_8, StandardOpenOption.APPEND);
-        } catch (IOException e) {
-            TrChatMod.LOGGER.error("Не удалось записать журнал наказаний", e);
-        }
-    }
-
-    private static String csv(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace(';', ',').replace('\n', ' ').replace('\r', ' ').trim();
-    }
-
     private static void feedback(Component component) {
         Minecraft client = Minecraft.getInstance();
         if (client.gui != null) {
-            client.gui.getChat().addMessage(
-                    Component.literal("[ChatMod] ")
-                            .withStyle(Style.EMPTY.withColor(ChatFormatting.GOLD))
-                            .append(component));
+            client.gui.getChat().addMessage(TrChatMod.prefix().append(component));
         }
     }
 }

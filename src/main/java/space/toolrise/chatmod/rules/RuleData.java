@@ -23,9 +23,16 @@ public class RuleData {
         public int capsMinLength = 8;
         public double capsRatio = 0.7;
         public int repeatCharThreshold = 8;
-        /** Флуд по определению проекта: 4 и более одинаковых сообщений за минуту. */
+        /** Флуд по определению проекта: 3 и более одинаковых сообщений за минуту. */
         public int spamWindowSeconds = 60;
-        public int spamRepeatCount = 4;
+        public int spamRepeatCount = 3;
+        /**
+         * Служебные реплики: в игре это просьба к модератору, а не флуд.
+         * Считаются по своему порогу {@link #spamLooseRepeatCount}.
+         */
+        public List<String> spamLoosePhrases = new ArrayList<>(List.of("спек", "spec"));
+        /** Порог для {@link #spamLoosePhrases}: мут только с 31-го повтора, то есть более 30 за минуту. */
+        public int spamLooseRepeatCount = 31;
         /**
          * Короче этого повторы не считаются флудом. «да», «я», «гг» в диалоге
          * повторяются постоянно и флудом не являются.

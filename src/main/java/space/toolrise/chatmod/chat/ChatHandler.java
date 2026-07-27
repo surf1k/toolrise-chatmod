@@ -9,6 +9,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import space.toolrise.chatmod.TrChatMod;
+import space.toolrise.chatmod.Variant;
 import space.toolrise.chatmod.config.ModConfig;
 import space.toolrise.chatmod.rules.ScanResult;
 import space.toolrise.chatmod.text.NickMasker;
@@ -144,15 +145,17 @@ public final class ChatHandler {
 
         // Даже чистая строка может быть объявлением «X замучен» — по нему
         // автомат снимает свою отложенную выдачу.
-        if (mod.autoModerator() != null) {
-            mod.autoModerator().observeChatLine(clean);
+        if (mod.auto() != null) {
+            mod.auto().observeChatLine(clean);
         }
 
         ChatParser.Parsed parsed = mod.parser().parse(clean);
         String nick = senderHint != null && !senderHint.isBlank() ? senderHint : parsed.nick();
 
-        // В буфер кладём вообще всё: протоколу нужен контекст, а не только нарушения.
-        mod.chatLog().add(System.currentTimeMillis(), clean, nick);
+        // В буфер протокола кладём вообще всё: ему нужен контекст, а не только нарушения.
+        if (mod.evidence() != null) {
+            mod.evidence().observe(System.currentTimeMillis(), clean, nick);
+        }
         String body = parsed.body();
         int bodyStart = parsed.bodyStart();
 
@@ -206,8 +209,8 @@ public final class ChatHandler {
         FlaggedMessage flagged = new FlaggedMessage(
                 id, nick, isOnline(nick), body, bodyStart, clean, parsed.prefix(), result, now);
         mod.store().put(flagged);
-        if (mod.autoModerator() != null) {
-            mod.autoModerator().handle(flagged);
+        if (mod.auto() != null) {
+            mod.auto().handle(flagged);
         }
         return flagged;
     }
@@ -225,9 +228,12 @@ public final class ChatHandler {
                 return true;
             }
         }
-        for (String ignored : config.ignoredNicks) {
-            if (ignored != null && ignored.toLowerCase(Locale.ROOT).equals(lower)) {
-                return true;
+        // Игнор-лист есть только в полной версии.
+        if (Variant.FULL) {
+            for (String ignored : config.ignoredNicks) {
+                if (ignored != null && ignored.toLowerCase(Locale.ROOT).equals(lower)) {
+                    return true;
+                }
             }
         }
         if (config.ignoreStaff) {

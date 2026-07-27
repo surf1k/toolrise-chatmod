@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -19,6 +20,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAccessor;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Протокол наказания: подтверждение, что мут выдан по делу.
@@ -29,20 +32,40 @@ import java.util.Locale;
  * дополнительно и не всегда полезен: чат в игре гаснет через несколько секунд,
  * а автомат выдаёт мут с задержкой — к этому моменту нужной строки на экране
  * уже может не быть. У текстового протокола такой проблемы нет.
+ *
+ * <p>Здесь же ведётся {@code punishments.csv} — по нему считают норму.
  */
-public final class EvidenceRecorder {
+public final class EvidenceRecorder implements Evidence {
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("HH-mm-ss");
     private static final DateTimeFormatter LINE_STAMP = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter CSV_STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private static final String CSV_HEADER =
+            "время;источник;модератор;нарушитель;правило;срок;команда;сообщение";
 
     private final TrChatMod mod;
+    private final ChatLogBuffer chatLog;
 
     public EvidenceRecorder(TrChatMod mod) {
         this.mod = mod;
+        this.chatLog = new ChatLogBuffer(mod.config().chatLogBufferSize);
+    }
+
+    /** В буфер кладём вообще всё: протоколу нужен контекст, а не только нарушения. */
+    @Override
+    public void observe(long time, String line, String nick) {
+        chatLog.add(time, line, nick);
+    }
+
+    @Override
+    public void clear() {
+        chatLog.clear();
     }
 
     /** Корень протоколов: {@code .minecraft/trmod}. */
+    @Override
     public Path directory() {
         ModConfig config = mod.config();
         String name = config.evidenceDir == null || config.evidenceDir.isBlank()
@@ -51,13 +74,18 @@ public final class EvidenceRecorder {
     }
 
     /**
-     * Сохраняет протокол по выданному наказанию.
+     * Сохраняет протокол по выданному наказанию и строку в журнал.
      *
      * @return путь к файлу протокола или {@code null}
      */
+    @Override
     public Path record(FlaggedMessage message, String nick, String time,
                        String reason, String ruleInfo, boolean auto, String command) {
         ModConfig config = mod.config();
+        if (config.logPunishments) {
+            log(auto ? "авто" : "вручную", nick, ruleInfo, time, command,
+                    message == null ? "" : message.body());
+        }
         if (!config.saveEvidence) {
             return null;
         }
@@ -72,7 +100,7 @@ public final class EvidenceRecorder {
                     StandardCharsets.UTF_8);
 
             if (config.saveScreenshot) {
-                screenshot(dir.resolve(base + ".png"));
+                screenshot(dir.resolve(base + ".png"), config.screenshotDelayMillis);
             }
             return file;
         } catch (Exception e) {
@@ -85,8 +113,7 @@ public final class EvidenceRecorder {
                          String ruleInfo, boolean auto, String command, LocalDateTime now) {
         ModConfig config = mod.config();
         StringBuilder sb = new StringBuilder();
-        String moderator = Minecraft.getInstance().player == null
-                ? "?" : Minecraft.getInstance().player.getGameProfile().name();
+        String moderator = moderator();
 
         sb.append("ПРОТОКОЛ НАКАЗАНИЯ\n");
         sb.append("=".repeat(60)).append('\n');
@@ -120,13 +147,13 @@ public final class EvidenceRecorder {
 
         // Для флуда и спама важно показать все повторы, а не одну строку.
         int window = Math.max(60, config.evidenceWindowSeconds);
-        List<ChatLogBuffer.Line> own = mod.chatLog().byPlayer(nick, window, System.currentTimeMillis());
+        List<ChatLogBuffer.Line> own = chatLog.byPlayer(nick, window, System.currentTimeMillis());
         if (!own.isEmpty()) {
             sb.append('\n').append("ВСЕ РЕПЛИКИ ИГРОКА ЗА ПОСЛЕДНИЕ ").append(window)
                     .append(" СЕК (").append(own.size()).append(")\n");
 
             // Окно показа шире окна флуда. Без пометки протокол читается как
-            // «четыре повтора за две минуты», то есть как доказательство не того,
+            // «повторы за две минуты», то есть как доказательство не того,
             // за что выдан мут. Помечаем ровно то, что посчитал детектор.
             boolean floodCase = message != null && hasFloodEvidence(message);
             int floodWindow = mod.engine().data().settings.spamWindowSeconds;
@@ -148,7 +175,7 @@ public final class EvidenceRecorder {
             }
         }
 
-        List<ChatLogBuffer.Line> context = mod.chatLog().tail(config.evidenceContextLines);
+        List<ChatLogBuffer.Line> context = chatLog.tail(config.evidenceContextLines);
         if (!context.isEmpty()) {
             sb.append('\n').append("ЧАТ ВОКРУГ СОБЫТИЯ (").append(context.size()).append(" строк)\n");
             sb.append("-".repeat(60)).append('\n');
@@ -160,6 +187,43 @@ public final class EvidenceRecorder {
             }
         }
         return sb.toString();
+    }
+
+    /** Строка в {@code config/trchatmod/punishments.csv} — по нему считают норму. */
+    private void log(String source, String nick, String ruleInfo, String time, String command, String body) {
+        Path file = mod.configManager().directory().resolve("punishments.csv");
+        String row = String.join(";",
+                text(CSV_STAMP, LocalDateTime.now()),
+                csv(source),
+                csv(moderator()),
+                csv(nick),
+                csv(ruleInfo),
+                csv(time),
+                csv("/" + command),
+                csv(body));
+        try {
+            Files.createDirectories(file.getParent());
+            if (Files.notExists(file)) {
+                Files.writeString(file, CSV_HEADER + System.lineSeparator(),
+                        StandardCharsets.UTF_8, StandardOpenOption.CREATE);
+            }
+            Files.writeString(file, row + System.lineSeparator(),
+                    StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+        } catch (IOException e) {
+            TrChatMod.LOGGER.error("Не удалось записать журнал наказаний", e);
+        }
+    }
+
+    private static String csv(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace(';', ',').replace('\n', ' ').replace('\r', ' ').trim();
+    }
+
+    private static String moderator() {
+        return Minecraft.getInstance().player == null
+                ? "?" : Minecraft.getInstance().player.getGameProfile().name();
     }
 
     /** Сработал ли детектор повторов — по нему решаем, показывать ли окно флуда. */
@@ -174,7 +238,21 @@ public final class EvidenceRecorder {
         return false;
     }
 
-    private static void screenshot(Path target) {
+    /**
+     * Кадр берётся не сразу: команда мута уходит в том же тике, в котором мы сюда
+     * попали, и на снимке без паузы чат ещё не успевает отрисовать ни само событие,
+     * ни строку подтверждения — получается кадр «ни о чём». Пауза в секунду это чинит.
+     */
+    private static void screenshot(Path target, int delayMillis) {
+        if (delayMillis <= 0) {
+            capture(target);
+            return;
+        }
+        CompletableFuture.delayedExecutor(delayMillis, TimeUnit.MILLISECONDS)
+                .execute(() -> capture(target));
+    }
+
+    private static void capture(Path target) {
         Minecraft client = Minecraft.getInstance();
         // Захват кадра возможен только на рендер-потоке.
         client.execute(() -> {

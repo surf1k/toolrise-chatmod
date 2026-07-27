@@ -1,8 +1,6 @@
 package space.toolrise.chatmod.chat;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -37,22 +35,8 @@ public final class FlaggedMessageStore {
         return messages.get(id);
     }
 
-    /** Последние N записей, свежие первыми. */
-    public synchronized List<FlaggedMessage> recent(int limit) {
-        List<FlaggedMessage> all = new ArrayList<>(messages.values());
-        List<FlaggedMessage> out = new ArrayList<>();
-        for (int i = all.size() - 1; i >= 0 && out.size() < limit; i--) {
-            out.add(all.get(i));
-        }
-        return out;
-    }
-
     public synchronized void clear() {
         messages.clear();
-    }
-
-    public synchronized int size() {
-        return messages.size();
     }
 
     private void trim() {

@@ -9,6 +9,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 import space.toolrise.chatmod.TrChatMod;
+import space.toolrise.chatmod.Variant;
 import space.toolrise.chatmod.chat.FlaggedMessage;
 import space.toolrise.chatmod.punish.PunishmentExecutor;
 import space.toolrise.chatmod.rules.Violation;
@@ -92,12 +93,15 @@ public final class PunishScreen extends Screen {
                 .build());
         y += ROW_HEIGHT;
 
-        addRenderableWidget(Button.builder(
-                        Component.literal("Не проверять этого игрока")
-                                .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)),
-                        b -> ignorePlayer())
-                .bounds(left, y, FIELD_WIDTH, 20)
-                .build());
+        // Игнор-лист есть только в полной версии.
+        if (Variant.FULL) {
+            addRenderableWidget(Button.builder(
+                            Component.literal("Не проверять этого игрока")
+                                    .withStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)),
+                            b -> ignorePlayer())
+                    .bounds(left, y, FIELD_WIDTH, 20)
+                    .build());
+        }
 
         applySelection();
         setInitialFocus(nickBox);

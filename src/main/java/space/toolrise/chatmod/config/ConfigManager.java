@@ -1,10 +1,13 @@
 package space.toolrise.chatmod.config;
 
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import net.fabricmc.loader.api.FabricLoader;
 import space.toolrise.chatmod.TrChatMod;
+import space.toolrise.chatmod.Variant;
 import space.toolrise.chatmod.rules.RuleData;
 import space.toolrise.chatmod.rules.RuleEngine;
 
@@ -24,9 +27,23 @@ import java.nio.file.StandardCopyOption;
  */
 public final class ConfigManager {
 
+    private static final ExclusionStrategy VARIANT_FIELDS = new ExclusionStrategy() {
+        @Override
+        public boolean shouldSkipField(FieldAttributes f) {
+            return !Variant.FULL && f.getAnnotation(FullOnly.class) != null;
+        }
+
+        @Override
+        public boolean shouldSkipClass(Class<?> clazz) {
+            return false;
+        }
+    };
+
     private static final Gson GSON = new GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()
+            .addSerializationExclusionStrategy(VARIANT_FIELDS)
+            .addDeserializationExclusionStrategy(VARIANT_FIELDS)
             .create();
 
     private static final String DEFAULT_RULES_RESOURCE = "/trchatmod/default_rules.json";
@@ -37,7 +54,7 @@ public final class ConfigManager {
      * (например, про порог minMatches у 2.9). Старый файл сохраняется рядом,
      * на его место кладётся свежий.
      */
-    private static final int RULES_SCHEMA = 5;
+    private static final int RULES_SCHEMA = 7;
 
     private final Path directory;
     private final Path configFile;

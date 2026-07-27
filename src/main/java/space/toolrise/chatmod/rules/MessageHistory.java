@@ -5,6 +5,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Короткая история чата по игрокам. Нужна детекторам спама и флуда:
@@ -15,7 +16,12 @@ public final class MessageHistory {
     private record Entry(long timeMillis, String normalized) {
     }
 
-    private static final int MAX_PER_PLAYER = 32;
+    /**
+     * Столько последних реплик игрока держим. Запас нужен для порога служебных
+     * фраз («спек» — с 31-го повтора): при буфере в 32 записи чужие реплики
+     * вытесняли бы повторы, и порог оказался бы недостижим.
+     */
+    private static final int MAX_PER_PLAYER = 128;
     private static final long FORGET_AFTER_MILLIS = 5 * 60_000L;
 
     private final Map<String, Deque<Entry>> byPlayer = new HashMap<>();
@@ -50,6 +56,15 @@ public final class MessageHistory {
 
     /** Сколько всего сообщений от игрока за окно (включая текущее). */
     public synchronized int messageCount(String sender, int windowSeconds, long nowMillis) {
+        return messageCount(sender, windowSeconds, nowMillis, Set.of());
+    }
+
+    /**
+     * То же, но реплики из {@code ignoredNormalized} не считаются: у служебных
+     * фраз вроде «спек» свой порог, и поток из них не должен ловиться как флуд.
+     */
+    public synchronized int messageCount(String sender, int windowSeconds, long nowMillis,
+                                         Set<String> ignoredNormalized) {
         Deque<Entry> deque = byPlayer.get(key(sender));
         if (deque == null) {
             return 0;
@@ -57,7 +72,7 @@ public final class MessageHistory {
         long from = nowMillis - windowSeconds * 1000L;
         int n = 0;
         for (Entry e : deque) {
-            if (e.timeMillis() >= from) {
+            if (e.timeMillis() >= from && !ignoredNormalized.contains(e.normalized())) {
                 n++;
             }
         }

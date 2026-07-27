@@ -8,6 +8,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import space.toolrise.chatmod.TrChatMod;
+import space.toolrise.chatmod.Variant;
 import space.toolrise.chatmod.auto.AutoModerator;
 
 /**
@@ -32,7 +33,7 @@ public final class AutoHud {
     }
 
     private static void render(TrChatMod mod, GuiGraphics context) {
-        AutoModerator auto = mod.autoModerator();
+        AutoModerator auto = Variant.autoModerator();
         if (auto == null || !auto.isActive()) {
             return;
         }
@@ -44,10 +45,9 @@ public final class AutoHud {
         Font font = client.font;
         boolean dry = auto.isDryRun();
         Component title = Component.literal(dry ? "● АВТОМАТ (ТЕСТ)" : "● АВТОМАТ");
-        int waiting = auto.pending().size();
+        int waiting = auto.pendingCount();
         Component stats = Component.literal("выдано " + auto.issuedCount()
-                + (waiting > 0 ? " · ждёт " + waiting : "")
-                + " · очередь " + auto.queueSize());
+                + (waiting > 0 ? " · ждёт " + waiting : ""));
 
         int width = Math.max(font.width(title), font.width(stats));
         int x = context.guiWidth() - width - 6;
